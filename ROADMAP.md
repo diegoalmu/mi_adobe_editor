@@ -2,31 +2,24 @@
 
 Cada fase es una entrega funcional. No pasamos a la siguiente hasta que la actual funcione.
 
-## Fase 0 — Preparar el entorno ✅ (hoy)
-- Instalar Python
-- Instalar editor de código (VS Code)
-- Crear entorno virtual
-- Instalar librerías base
-- Crear estructura del proyecto y repositorio Git
-
-## Fase 1 — Visor de PDF (hoy)
+## Fase 1 — Visor de PDF ✅ (completado)
 - Ventana con menú (Archivo, Editar, Ver)
 - Abrir un PDF y mostrarlo en pantalla
-- Botones: página siguiente / anterior, zoom +/-
-- Panel de miniaturas de páginas
+- Scroll continuo (se cambió el plan original de botones siguiente/anterior)
+- Zoom +/-
 
-## Fase 2 — Anotaciones (siguiente sesión)
+## Fase 2 — Anotaciones ✅ (completado)
 - Resaltar, subrayar, tachar texto
-- Agregar notas/comentarios
 - Agregar texto libre sobre la página
-- Dibujar formas (rectángulo, círculo, línea, flecha)
-- Sello/timbre e imágenes
+- Dibujar formas (rectángulo, círculo, línea)
+- [ ] Pendiente: notas/comentarios tipo "sticky note", sello/timbre e imágenes
 
-## Fase 3 — Edición de páginas
+## Fase 3 — Edición de páginas ✅ (completado)
 - Unir varios PDFs en uno
 - Dividir un PDF en varios archivos
-- Eliminar, rotar y reordenar páginas (arrastrar y soltar)
-- Extraer páginas sueltas
+- Eliminar y rotar páginas
+- Reordenar páginas (cuadrícula de miniaturas + botones de mover)
+- [ ] Pendiente: extraer páginas sueltas como función independiente (ahora mismo se logra con "Dividir")
 
 ## Fase 4 — Edición de texto real (la parte difícil)
 - Detectar bloques de texto existentes
