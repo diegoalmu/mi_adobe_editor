@@ -1,0 +1,11 @@
+# Entorno virtual de Python (se recrea con requirements.txt, no debe subirse)
+venv/
+__pycache__/
+*.pyc
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Obsidian (configuración personal, no hace falta compartirla)
+.obsidian/
