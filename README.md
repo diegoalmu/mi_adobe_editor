@@ -11,18 +11,19 @@ Editor de PDF propio, gratuito y de código abierto, creado como alternativa per
 Construir, paso a paso y documentando todo el proceso (para portafolio y evidencia académica),
 un programa de escritorio (Windows y Linux) capaz de:
 
-- [ ] Abrir y visualizar PDFs (zoom, scroll, miniaturas de páginas)
-- [ ] Editar texto existente dentro del PDF
-- [ ] Agregar texto nuevo, imágenes, formas y sellos
-- [ ] Resaltar, subrayar, tachar y comentar (anotaciones)
-- [ ] Unir, dividir, reordenar, rotar y eliminar páginas
+- [x] Abrir y visualizar PDFs (zoom, scroll continuo tipo Adobe)
+- [x] Editar texto nuevo, formas y anotaciones (imágenes/sellos aún no)
+- [x] Resaltar, subrayar, tachar
+- [ ] Comentar (notas tipo "sticky note")
+- [x] Unir, dividir, reordenar (arrastrar o botones), rotar y eliminar páginas
 - [ ] Rellenar y crear formularios PDF
-- [ ] Convertir PDF ↔ Word/Excel/Imágenes
+- [x] Exportar PDF a imágenes
+- [ ] Convertir PDF ↔ Word/Excel
 - [ ] OCR (convertir PDFs escaneados en texto editable/buscable)
 - [ ] Redactar/tachar información sensible de forma permanente
 - [ ] Firmar digitalmente documentos
-- [ ] Comprimir y optimizar el tamaño del archivo
-- [ ] Proteger con contraseña / quitar contraseña
+- [x] Comprimir y optimizar el tamaño del archivo
+- [x] Proteger con contraseña / quitar contraseña
 
 ## 🛠️ Tecnología usada
 
