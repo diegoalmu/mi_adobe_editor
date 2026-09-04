@@ -113,6 +113,32 @@ Cuando empaquetemos el programa como `.exe` para Windows más adelante, Windows 
 
 ---
 
+## Sesión 4 — 2026-09-02
+
+**Objetivo de la sesión:** Terminar las funciones que faltaban del checklist original: convertir a Word, OCR, firma por imagen, y la más difícil — editar texto que ya existe en el PDF. Además, reorganizar la interfaz y pulir detalles.
+
+**Funciones nuevas construidas:**
+1. **Convertir a Word (.docx)**: usa la librería `pdf2docx`. El texto queda como texto real editable en Word, no como imagen. Probado y confirmado antes de integrarlo.
+2. **OCR (Archivo → Hacer PDF buscable)**: usa `ocrmypdf` + Tesseract (motor de OCR) + Ghostscript. Le agrega una capa de texto invisible a las páginas escaneadas para que se puedan buscar/copiar, sin tocar las páginas que ya tenían texto (`skip_text=True`). Requiere instalar en el sistema: `sudo apt install tesseract-ocr tesseract-ocr-spa ghostscript`.
+3. **Firma por imagen**: se carga una imagen (PNG con transparencia funciona mejor) con el botón "Cargar imagen de firma...", y se coloca en el documento como una herramienta más (arrastrando un cuadro).
+4. **Editar texto existente**: la función técnicamente más compleja del proyecto. Detecta el texto/tamaño/color real dentro del área que arrastra el usuario (usando `get_text("dict")`), muestra un diálogo para editarlo, y usa `add_redact_annot()` + `apply_redactions()` para tapar el texto viejo y escribir el nuevo en su lugar. Limitación real y esperada: funciona mejor para cambios cortos (precios, fechas, nombres); no "empuja" el resto del párrafo como Word, porque los PDFs no son documentos de flujo.
+
+**Reorganización de la interfaz:**
+- Con tantas funciones ya no cabían todos los botones en una sola barra. Se reorganizó todo en 4 menús desplegables arriba: **Archivo, Páginas, Herramientas, Seguridad**. La barra de herramientas quedó reducida solo a lo de uso constante: zoom, indicador de página, y el selector de herramienta de anotación activa.
+
+**Detalles pulidos:**
+- Los diálogos nativos (Guardar, Abrir, Cancelar) aparecían en inglés a pesar de que el sistema está en español. Se solucionó cargando la traducción oficial de Qt al español (`qtbase_es.qm`, incluida en PySide6, no requiere instalar nada nuevo).
+- Se agregó manejo de errores página por página: si un PDF tiene alguna página con datos corruptos/raros internamente, el programa muestra un aviso solo en esa página en vez de arriesgarse a fallar en toda la ventana. Esto surgió al toparse con un PDF real que generaba un `zlib error` en la terminal (MuPDF se recuperaba solo, pero se blindó el programa para el futuro).
+
+**Resultado:** Editor de PDF con prácticamente todas las funciones "del día a día" de Adobe Acrobat Pro DC: ver, anotar, editar texto existente, gestionar páginas, unir/dividir, exportar, comprimir, proteger con contraseña, convertir a Word, y hacer OCR. Sin errores pendientes al cierre de esta sesión.
+
+**Pendiente para futuras sesiones (funciones menores que faltan):**
+- Rellenar y crear formularios PDF (campos de texto, checkboxes)
+- Notas tipo "sticky note" (comentarios, distinto del texto libre que ya existe)
+- Empaquetar como `.exe` para Windows (Fase 8 del ROADMAP — cuidado especial con Windows Defender/SmartScreen)
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
