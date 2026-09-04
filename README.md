@@ -12,16 +12,17 @@ Construir, paso a paso y documentando todo el proceso (para portafolio y evidenc
 un programa de escritorio (Windows y Linux) capaz de:
 
 - [x] Abrir y visualizar PDFs (zoom, scroll continuo tipo Adobe)
-- [x] Editar texto nuevo, formas y anotaciones (imágenes/sellos aún no)
+- [x] Editar texto que YA EXISTE en el PDF (cambios cortos: precios, fechas, nombres)
+- [x] Agregar texto nuevo, formas, y firma por imagen
 - [x] Resaltar, subrayar, tachar
 - [ ] Comentar (notas tipo "sticky note")
 - [x] Unir, dividir, reordenar (arrastrar o botones), rotar y eliminar páginas
 - [ ] Rellenar y crear formularios PDF
 - [x] Exportar PDF a imágenes
-- [ ] Convertir PDF ↔ Word/Excel
-- [ ] OCR (convertir PDFs escaneados en texto editable/buscable)
-- [ ] Redactar/tachar información sensible de forma permanente
-- [ ] Firmar digitalmente documentos
+- [x] Convertir PDF → Word (.docx)
+- [x] OCR (convertir PDFs escaneados en texto editable/buscable)
+- [ ] Redactar/tachar información sensible de forma permanente (distinto de "editar texto")
+- [ ] Firmar digitalmente con certificado (por ahora: firma por imagen, no criptográfica)
 - [x] Comprimir y optimizar el tamaño del archivo
 - [x] Proteger con contraseña / quitar contraseña
 

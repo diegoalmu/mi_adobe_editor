@@ -81,6 +81,22 @@ que están listadas en el archivo `requirements.txt`.
 > sudo apt install libxcb-cursor0 libxkbcommon-x11-0 -y
 > ```
 
+## Paso 5.5 — Dependencias del sistema para OCR
+
+La función de OCR (hacer buscable un PDF escaneado) necesita dos programas del
+sistema (no son librerías de Python, por eso no basta con `pip install`):
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-spa ghostscript -y
+```
+
+**Qué hace:**
+- `tesseract-ocr`: el motor que "lee" el texto dentro de las imágenes.
+- `tesseract-ocr-spa`: el paquete de idioma español para ese motor (sin esto,
+  solo reconocería bien texto en inglés).
+- `ghostscript`: herramienta que usa `ocrmypdf` por dentro para procesar las
+  páginas del PDF.
+
 ## Paso 6 — Ejecutar el programa
 
 ```bash

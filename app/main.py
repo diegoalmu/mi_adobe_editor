@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QAbstractItemView,
 )
 from PySide6.QtGui import QPixmap, QImage, QAction, QIcon
-from PySide6.QtCore import Qt, QRect, QSize, Signal
+from PySide6.QtCore import Qt, QRect, QSize, Signal, QTranslator, QLibraryInfo, QLocale
 
 
 # =========================================================================
@@ -187,6 +187,8 @@ class EditorPDF(QMainWindow):
         "Rectangulo",
         "Linea",
         "Circulo",
+        "Firma (imagen)",
+        "Editar texto existente",
     ]
 
     def __init__(self):
@@ -194,6 +196,7 @@ class EditorPDF(QMainWindow):
 
         self.documento = None
         self.ruta_actual = None
+        self.ruta_firma = None          # ruta a la imagen de firma cargada por el usuario
         self.zoom = 1.5
         self.pagina_actual = 0          # pagina que se considera "visible" ahora mismo
         self.etiquetas_paginas = []      # lista de EtiquetaPDF, una por pagina
@@ -226,40 +229,51 @@ class EditorPDF(QMainWindow):
         self.layout_paginas.addWidget(etiqueta_vacia)
 
     # ---------------------------------------------------------------
-    # MENU DESPLEGABLE "ARCHIVO"
+    # MENU SUPERIOR (Archivo, Paginas, Herramientas, Seguridad)
     # ---------------------------------------------------------------
 
     def crear_menu_archivo(self):
         menu_archivo = self.menuBar().addMenu("Archivo")
 
-        accion_abrir = QAction("Abrir PDF...", self)
-        accion_abrir.triggered.connect(self.abrir_pdf)
-        menu_archivo.addAction(accion_abrir)
-
+        self.agregar_a_menu(menu_archivo, "Abrir PDF...", self.abrir_pdf)
         menu_archivo.addSeparator()
-
-        accion_guardar = QAction("Guardar", self)
-        accion_guardar.triggered.connect(self.guardar)
-        menu_archivo.addAction(accion_guardar)
-
-        accion_guardar_como = QAction("Guardar como...", self)
-        accion_guardar_como.triggered.connect(self.guardar_como)
-        menu_archivo.addAction(accion_guardar_como)
-
+        self.agregar_a_menu(menu_archivo, "Guardar", self.guardar)
+        self.agregar_a_menu(menu_archivo, "Guardar como...", self.guardar_como)
         menu_archivo.addSeparator()
-
-        accion_cerrar = QAction("Cerrar documento", self)
-        accion_cerrar.triggered.connect(self.cerrar_documento)
-        menu_archivo.addAction(accion_cerrar)
-
+        self.agregar_a_menu(menu_archivo, "Convertir a Word (.docx)...", self.convertir_a_word)
+        self.agregar_a_menu(menu_archivo, "Hacer PDF buscable (OCR)...", self.hacer_ocr)
         menu_archivo.addSeparator()
+        self.agregar_a_menu(menu_archivo, "Cerrar documento", self.cerrar_documento)
+        menu_archivo.addSeparator()
+        self.agregar_a_menu(menu_archivo, "Salir del programa", self.close)
 
-        accion_salir = QAction("Salir del programa", self)
-        accion_salir.triggered.connect(self.close)
-        menu_archivo.addAction(accion_salir)
+        menu_paginas = self.menuBar().addMenu("Paginas")
+        self.agregar_a_menu(menu_paginas, "Rotar pagina actual", self.rotar_pagina)
+        self.agregar_a_menu(menu_paginas, "Eliminar pagina actual", self.eliminar_pagina)
+        self.agregar_a_menu(menu_paginas, "Insertar pagina en blanco", self.insertar_pagina_blanco)
+        menu_paginas.addSeparator()
+        self.agregar_a_menu(menu_paginas, "Reordenar paginas...", self.reordenar_paginas)
+
+        menu_herramientas = self.menuBar().addMenu("Herramientas")
+        self.agregar_a_menu(menu_herramientas, "Unir PDFs...", self.unir_pdfs)
+        self.agregar_a_menu(menu_herramientas, "Dividir PDF...", self.dividir_pdf)
+        self.agregar_a_menu(menu_herramientas, "Exportar a imagenes...", self.exportar_imagenes)
+        self.agregar_a_menu(menu_herramientas, "Comprimir PDF...", self.comprimir_pdf)
+        menu_herramientas.addSeparator()
+        self.agregar_a_menu(menu_herramientas, "Cargar imagen de firma...", self.cargar_firma)
+
+        menu_seguridad = self.menuBar().addMenu("Seguridad")
+        self.agregar_a_menu(menu_seguridad, "Agregar contrasena...", self.agregar_contrasena)
+        self.agregar_a_menu(menu_seguridad, "Quitar contrasena...", self.quitar_contrasena)
+
+    def agregar_a_menu(self, menu, texto, funcion):
+        accion = QAction(texto, self)
+        accion.triggered.connect(funcion)
+        menu.addAction(accion)
+        return accion
 
     # ---------------------------------------------------------------
-    # CONSTRUCCION DE BARRA DE HERRAMIENTAS
+    # BARRA DE HERRAMIENTAS (solo lo de uso constante: zoom, pagina, herramienta activa)
     # ---------------------------------------------------------------
 
     def crear_menus_y_barras(self):
@@ -283,22 +297,6 @@ class EditorPDF(QMainWindow):
         self.combo_herramienta.addItems(self.HERRAMIENTAS)
         self.combo_herramienta.currentTextChanged.connect(self.actualizar_ayuda)
         barra.addWidget(self.combo_herramienta)
-        barra.addSeparator()
-
-        self.agregar_boton(barra, "Rotar pagina", self.rotar_pagina)
-        self.agregar_boton(barra, "Eliminar pagina", self.eliminar_pagina)
-        self.agregar_boton(barra, "Insertar pagina en blanco", self.insertar_pagina_blanco)
-        self.agregar_boton(barra, "Reordenar paginas", self.reordenar_paginas)
-        barra.addSeparator()
-
-        self.agregar_boton(barra, "Unir PDFs", self.unir_pdfs)
-        self.agregar_boton(barra, "Dividir PDF", self.dividir_pdf)
-        self.agregar_boton(barra, "Exportar a imagenes", self.exportar_imagenes)
-        self.agregar_boton(barra, "Comprimir PDF", self.comprimir_pdf)
-        barra.addSeparator()
-
-        self.agregar_boton(barra, "Agregar contrasena", self.agregar_contrasena)
-        self.agregar_boton(barra, "Quitar contrasena", self.quitar_contrasena)
 
     def agregar_boton(self, barra, texto, funcion):
         accion = QAction(texto, self)
@@ -317,8 +315,25 @@ class EditorPDF(QMainWindow):
             "Rectangulo": "Arrastra para dibujar un rectangulo.",
             "Linea": "Arrastra desde el inicio hasta el final de la linea.",
             "Circulo": "Arrastra para dibujar un circulo/ovalo.",
+            "Firma (imagen)": "Arrastra un cuadro donde quieras colocar tu firma (cargala antes con 'Cargar firma...').",
+            "Editar texto existente": "Arrastra un cuadro AJUSTADO sobre el texto que ya existe y quieras cambiar. Se tapara el texto viejo y se escribira el nuevo en su lugar.",
         }
         self.statusBar().showMessage(mensajes.get(herramienta, ""))
+
+    def cargar_firma(self):
+        """Elige la imagen (PNG/JPG) que se usara como firma en la herramienta 'Firma (imagen)'."""
+        ruta, _ = QFileDialog.getOpenFileName(
+            self, "Selecciona la imagen de tu firma", "",
+            "Imagenes (*.png *.jpg *.jpeg)"
+        )
+        if ruta:
+            self.ruta_firma = ruta
+            self.statusBar().showMessage(f"Firma cargada: {os.path.basename(ruta)}", 5000)
+            QMessageBox.information(
+                self, "Firma cargada",
+                "Listo. Ahora elige la herramienta 'Firma (imagen)' en el desplegable "
+                "y arrastra un cuadro sobre el documento donde quieras colocarla."
+            )
 
     def actualizar_indicador_pagina(self):
         total = len(self.documento) if self.documento else 0
@@ -375,22 +390,40 @@ class EditorPDF(QMainWindow):
         posicion_y = 0
 
         for numero, pagina in enumerate(self.documento):
-            pixmap_fitz = pagina.get_pixmap(matrix=matriz_zoom)
-            imagen_qt = QImage(
-                pixmap_fitz.samples, pixmap_fitz.width, pixmap_fitz.height,
-                pixmap_fitz.stride, QImage.Format_RGB888,
-            )
-            pixmap_qt = QPixmap.fromImage(imagen_qt)
+            try:
+                pixmap_fitz = pagina.get_pixmap(matrix=matriz_zoom)
+                imagen_qt = QImage(
+                    pixmap_fitz.samples, pixmap_fitz.width, pixmap_fitz.height,
+                    pixmap_fitz.stride, QImage.Format_RGB888,
+                )
+                pixmap_qt = QPixmap.fromImage(imagen_qt)
 
-            etiqueta = EtiquetaPDF(numero)
-            etiqueta.setPixmap(pixmap_qt)
-            etiqueta.setFixedSize(pixmap_qt.size())
-            etiqueta.seleccion_lista.connect(self.al_seleccionar_rectangulo)
+                etiqueta = EtiquetaPDF(numero)
+                etiqueta.setPixmap(pixmap_qt)
+                etiqueta.setFixedSize(pixmap_qt.size())
+                etiqueta.seleccion_lista.connect(self.al_seleccionar_rectangulo)
 
-            self.layout_paginas.addWidget(etiqueta)
-            self.etiquetas_paginas.append(etiqueta)
-            self.offsets_top.append(posicion_y)
-            posicion_y += pixmap_qt.height() + ESPACIO_ENTRE_PAGINAS
+                self.layout_paginas.addWidget(etiqueta)
+                self.etiquetas_paginas.append(etiqueta)
+                self.offsets_top.append(posicion_y)
+                posicion_y += pixmap_qt.height() + ESPACIO_ENTRE_PAGINAS
+            except Exception as error:
+                # Si ESTA pagina en particular tiene algo corrupto/raro en el PDF,
+                # no tumbamos todo el programa: mostramos un aviso solo en su lugar
+                # y seguimos dibujando el resto de las paginas con normalidad.
+                etiqueta_error = QLabel(
+                    f"No se pudo dibujar la pagina {numero + 1}\n(el PDF tiene algo "
+                    f"dañado en esta pagina)\n\nDetalle: {error}"
+                )
+                etiqueta_error.setAlignment(Qt.AlignCenter)
+                etiqueta_error.setStyleSheet(
+                    "background: #fff3cd; border: 1px solid #ffc107; padding: 20px;"
+                )
+                etiqueta_error.setFixedSize(400, 150)
+                self.layout_paginas.addWidget(etiqueta_error)
+                self.etiquetas_paginas.append(None)  # ocupa el lugar, pero no es una pagina real
+                self.offsets_top.append(posicion_y)
+                posicion_y += 150 + ESPACIO_ENTRE_PAGINAS
 
         self.pagina_actual = max(0, min(self.pagina_actual, len(self.documento) - 1))
         self.actualizar_indicador_pagina()
@@ -464,6 +497,16 @@ class EditorPDF(QMainWindow):
                 texto, ok = QInputDialog.getText(self, "Texto libre", "Escribe el texto:")
                 if ok and texto:
                     pagina.add_freetext_annot(rect_pdf, texto, fontsize=12)
+            elif herramienta == "Firma (imagen)":
+                if not self.ruta_firma:
+                    QMessageBox.information(
+                        self, "Falta cargar la firma",
+                        "Primero dale clic a 'Cargar firma...' y elige tu imagen."
+                    )
+                    return
+                pagina.insert_image(rect_pdf, filename=self.ruta_firma)
+            elif herramienta == "Editar texto existente":
+                self.editar_texto_existente(pagina, rect_pdf)
 
             # Solo hace falta re-dibujar la pagina afectada, no todas (mas rapido)
             self.redibujar_pagina_individual(numero_pagina)
@@ -471,20 +514,88 @@ class EditorPDF(QMainWindow):
             QMessageBox.critical(self, "No se pudo agregar la anotacion", str(error))
 
     def redibujar_pagina_individual(self, numero_pagina):
-        pagina = self.documento[numero_pagina]
-        matriz_zoom = fitz.Matrix(self.zoom, self.zoom)
-        pixmap_fitz = pagina.get_pixmap(matrix=matriz_zoom)
-        imagen_qt = QImage(
-            pixmap_fitz.samples, pixmap_fitz.width, pixmap_fitz.height,
-            pixmap_fitz.stride, QImage.Format_RGB888,
-        )
-        pixmap_qt = QPixmap.fromImage(imagen_qt)
-        self.etiquetas_paginas[numero_pagina].setPixmap(pixmap_qt)
+        etiqueta_objetivo = self.etiquetas_paginas[numero_pagina]
+        if etiqueta_objetivo is None:
+            return  # esta pagina tuvo un error al dibujarse originalmente, no hay donde redibujar
+        try:
+            pagina = self.documento[numero_pagina]
+            matriz_zoom = fitz.Matrix(self.zoom, self.zoom)
+            pixmap_fitz = pagina.get_pixmap(matrix=matriz_zoom)
+            imagen_qt = QImage(
+                pixmap_fitz.samples, pixmap_fitz.width, pixmap_fitz.height,
+                pixmap_fitz.stride, QImage.Format_RGB888,
+            )
+            pixmap_qt = QPixmap.fromImage(imagen_qt)
+            etiqueta_objetivo.setPixmap(pixmap_qt)
+        except Exception as error:
+            QMessageBox.warning(self, "No se pudo actualizar la vista", str(error))
 
     # ---------------------------------------------------------------
     # PAGINAS (rotar/eliminar/insertar actuan sobre self.pagina_actual,
     # la que este marcada en el indicador en ese momento)
     # ---------------------------------------------------------------
+
+    def editar_texto_existente(self, pagina, rect_pdf):
+        """
+        Busca que texto REAL existe dentro del rectangulo que arrastro el usuario,
+        muestra un dialogo para editarlo, y si confirma, tapa el texto viejo y
+        escribe el texto nuevo en su lugar (con el mismo tamano y color detectados).
+
+        IMPORTANTE (limitacion real de los PDFs, explicada tambien en el ROADMAP):
+        esto NO "mueve" el resto del texto de la pagina como en Word. Si el texto
+        nuevo es mucho mas largo que el viejo, puede no caber bien en el mismo
+        espacio. Funciona mejor para cambios cortos (precios, fechas, nombres, etc.)
+        """
+        info = pagina.get_text("dict", clip=rect_pdf)
+
+        texto_actual = ""
+        tamano = 12
+        color_rgb = (0, 0, 0)
+        fuente_en_negrita = False
+
+        for bloque in info.get("blocks", []):
+            for linea in bloque.get("lines", []):
+                for span in linea.get("spans", []):
+                    texto_actual += span["text"]
+                    tamano = span["size"]
+                    codigo_color = span["color"]
+                    color_rgb = (
+                        ((codigo_color >> 16) & 255) / 255,
+                        ((codigo_color >> 8) & 255) / 255,
+                        (codigo_color & 255) / 255,
+                    )
+                    fuente_en_negrita = "bold" in span.get("font", "").lower()
+
+        if not texto_actual.strip():
+            QMessageBox.information(
+                self, "No se encontro texto",
+                "No detecte texto existente dentro del recuadro que dibujaste. "
+                "Intenta arrastrar un cuadro mas ajustado, justo sobre las letras.\n\n"
+                "(Si el PDF es una imagen escaneada, primero usa Archivo -> "
+                "Hacer PDF buscable (OCR), y guarda ese resultado antes de editarlo)."
+            )
+            return
+
+        texto_nuevo, ok = QInputDialog.getText(
+            self, "Editar texto existente",
+            "Texto detectado (edítalo y presiona Aceptar):",
+            text=texto_actual,
+        )
+        if not ok or texto_nuevo == texto_actual:
+            return
+
+        try:
+            fuente = "helv-bold" if fuente_en_negrita else "helv"
+            # add_redact_annot marca la zona para "borrar de verdad" el contenido
+            # original (no solo taparlo visualmente) y opcionalmente escribe
+            # texto nuevo ahi mismo cuando se aplica con apply_redactions().
+            pagina.add_redact_annot(
+                rect_pdf, text=texto_nuevo, fontsize=tamano,
+                fontname=fuente, text_color=color_rgb, align=0,
+            )
+            pagina.apply_redactions()
+        except Exception as error:
+            QMessageBox.critical(self, "Error al editar el texto", str(error))
 
     def rotar_pagina(self):
         if self.documento is None:
@@ -608,6 +719,159 @@ class EditorPDF(QMainWindow):
 
         self.setWindowTitle("Mi Adobe PDF - Fase 2")
         self.actualizar_indicador_pagina()
+
+    def convertir_a_word(self):
+        """Convierte el PDF actual (con los cambios que tengas hechos) a un archivo Word (.docx)."""
+        if self.documento is None:
+            QMessageBox.information(self, "Aviso", "Primero abre un PDF.")
+            return
+
+        ruta_destino, _ = QFileDialog.getSaveFileName(
+            self, "Guardar como Word", "", "Documentos Word (*.docx)"
+        )
+        if not ruta_destino:
+            return
+        if not ruta_destino.lower().endswith(".docx"):
+            ruta_destino += ".docx"
+
+        try:
+            from pdf2docx import Converter
+        except ImportError:
+            QMessageBox.critical(
+                self, "Falta una libreria",
+                "Falta instalar 'pdf2docx'. En tu terminal (con el venv activado) ejecuta:\n\n"
+                "pip install -r requirements.txt"
+            )
+            return
+
+        ruta_temporal = None
+        try:
+            self.statusBar().showMessage("Convirtiendo a Word, espera un momento...")
+            QApplication.processEvents()  # refresca la ventana para que se vea el mensaje antes de la espera
+
+            # pdf2docx necesita un ARCHIVO en disco como entrada, asi que primero
+            # guardamos el documento actual (con tus anotaciones/cambios) en un PDF temporal.
+            carpeta_temporal = tempfile.gettempdir()
+            descriptor, ruta_temporal = tempfile.mkstemp(suffix=".pdf", dir=carpeta_temporal)
+            os.close(descriptor)
+            self.documento.save(ruta_temporal)
+
+            convertidor = Converter(ruta_temporal)
+            convertidor.convert(ruta_destino)
+            convertidor.close()
+
+            self.statusBar().showMessage("Conversion terminada.", 5000)
+            QMessageBox.information(
+                self, "Listo",
+                f"Word guardado en:\n{ruta_destino}\n\n"
+                "Nota: en documentos con diseños complicados (tablas raras, columnas, "
+                "PDFs escaneados sin texto real) el formato puede no quedar identico."
+            )
+        except Exception as error:
+            self.statusBar().clearMessage()
+            QMessageBox.critical(self, "Error al convertir", str(error))
+        finally:
+            if ruta_temporal and os.path.exists(ruta_temporal):
+                os.remove(ruta_temporal)
+
+    def convertir_a_word(self):
+        if self.documento is None:
+            QMessageBox.information(self, "Aviso", "Primero abre un PDF.")
+            return
+        ruta_destino, _ = QFileDialog.getSaveFileName(
+            self, "Guardar como Word", "", "Documentos Word (*.docx)"
+        )
+        if not ruta_destino:
+            return
+        if not ruta_destino.lower().endswith(".docx"):
+            ruta_destino += ".docx"
+
+        ruta_pdf_temporal = None
+        try:
+            # Import aqui adentro (y no arriba del archivo) para que el programa
+            # siga abriendo aunque a alguien le falte instalar pdf2docx.
+            from pdf2docx import Converter
+
+            # Guardamos el documento actual (con tus anotaciones/cambios) en un PDF
+            # temporal, porque pdf2docx necesita leer un archivo real desde el disco.
+            descriptor, ruta_pdf_temporal = tempfile.mkstemp(suffix=".pdf")
+            os.close(descriptor)
+            self.documento.save(ruta_pdf_temporal)
+
+            self.statusBar().showMessage("Convirtiendo a Word, esto puede tardar unos segundos...")
+            QApplication.processEvents()  # deja que se vea el mensaje antes de la parte pesada
+
+            conversor = Converter(ruta_pdf_temporal)
+            conversor.convert(ruta_destino)
+            conversor.close()
+
+            QMessageBox.information(self, "Listo", f"Documento Word guardado en:\n{ruta_destino}")
+        except ImportError:
+            QMessageBox.critical(
+                self, "Falta una libreria",
+                "Falta instalar 'pdf2docx'. Con tu (venv) activado, ejecuta:\n\npip install pdf2docx"
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "Error al convertir", str(error))
+        finally:
+            if ruta_pdf_temporal and os.path.exists(ruta_pdf_temporal):
+                os.remove(ruta_pdf_temporal)
+            self.statusBar().clearMessage()
+
+    def hacer_ocr(self):
+        """
+        Le agrega al PDF una capa de texto invisible (reconocido por OCR) sobre
+        las paginas que sean solo imagen (escaneadas), para que ese texto se
+        pueda seleccionar, copiar y buscar. Las paginas que YA tengan texto
+        se dejan intactas (no se tocan ni se re-escanean).
+        """
+        if self.documento is None:
+            QMessageBox.information(self, "Aviso", "Primero abre un PDF.")
+            return
+        ruta_destino, _ = QFileDialog.getSaveFileName(
+            self, "Guardar PDF con OCR como", "", "Archivos PDF (*.pdf)"
+        )
+        if not ruta_destino:
+            return
+        if not ruta_destino.lower().endswith(".pdf"):
+            ruta_destino += ".pdf"
+
+        ruta_pdf_temporal = None
+        try:
+            import ocrmypdf
+
+            descriptor, ruta_pdf_temporal = tempfile.mkstemp(suffix=".pdf")
+            os.close(descriptor)
+            self.documento.save(ruta_pdf_temporal)
+
+            self.statusBar().showMessage(
+                "Aplicando OCR... esto puede tardar varios segundos por pagina, espera."
+            )
+            QApplication.processEvents()
+
+            ocrmypdf.ocr(
+                ruta_pdf_temporal,
+                ruta_destino,
+                language="spa+eng",   # reconoce texto en espanol e ingles
+                deskew=True,          # endereza paginas escaneadas torcidas
+                skip_text=True,       # si una pagina YA tiene texto, no la toca
+                progress_bar=False,
+            )
+            QMessageBox.information(self, "Listo", f"PDF con OCR guardado en:\n{ruta_destino}")
+        except ImportError:
+            QMessageBox.critical(
+                self, "Falta instalar componentes",
+                "Falta 'ocrmypdf'. Con tu (venv) activado:\n\n"
+                "pip install ocrmypdf\n\n"
+                "Y en el sistema (una sola vez):\n"
+                "sudo apt install tesseract-ocr tesseract-ocr-spa ghostscript -y"
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "Error al aplicar OCR", str(error))
+        finally:
+            if ruta_pdf_temporal and os.path.exists(ruta_pdf_temporal):
+                os.remove(ruta_pdf_temporal)
+            self.statusBar().clearMessage()
 
     def unir_pdfs(self):
         rutas, _ = QFileDialog.getOpenFileNames(
@@ -733,6 +997,15 @@ class EditorPDF(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # Cargamos la traduccion oficial de Qt al espanol, para que los dialogos
+    # nativos (Guardar, Abrir, Cancelar, etc.) tambien salgan en espanol
+    # y no se queden en ingles como vienen por defecto.
+    traductor = QTranslator()
+    ruta_traducciones = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if traductor.load(QLocale(QLocale.Language.Spanish), "qtbase", "_", ruta_traducciones):
+        app.installTranslator(traductor)
+
     ventana = EditorPDF()
     ventana.show()
     sys.exit(app.exec())
