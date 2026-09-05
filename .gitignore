@@ -9,3 +9,8 @@ Thumbs.db
 
 # Obsidian (configuración personal, no hace falta compartirla)
 .obsidian/
+
+# Archivos generados al empaquetar con PyInstaller (pesan cientos de MB, no se suben)
+build/
+dist/
+*.spec
