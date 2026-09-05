@@ -139,6 +139,73 @@ Cuando empaquetemos el programa como `.exe` para Windows más adelante, Windows 
 
 ---
 
+---
+
+## Sesión 5 — 2026-09-05
+
+**Objetivo de la sesión:** Empaquetar el programa como ejecutable independiente (Fase 8 del ROADMAP), para que se pueda abrir con doble clic sin necesitar Python, `venv`, ni terminal.
+
+**Trabajo previo de esta sesión (correcciones a la Fase 4):**
+Antes del empaquetado, se corrigieron varios errores reales encontrados al probar
+"Editar contenido" contra documentos reales del usuario (catálogo técnico y
+manual universitario):
+- La detección de párrafos usaba el espacio entre líneas para saber dónde
+  termina un párrafo, pero eso falla en documentos con interlineado uniforme
+  (sin salto extra entre párrafos). Se cambió la señal a "si la línea llega
+  al margen derecho normal" (línea llena = continúa el párrafo; línea corta
+  = ahí termina).
+- Se agregó una regla de ancho mínimo para evitar que etiquetas cortas sueltas
+  (ej. "Terminado", "Pantalla" en una ficha técnica) se mezclaran por accidente.
+- **Bug crítico de pérdida de datos**: al editar texto, si el texto nuevo no
+  cabía, el programa ya había borrado el original antes de darse cuenta. Se
+  corrigió para probar primero en un documento descartable, y solo borrar el
+  original si YA se confirmó que el reemplazo cabe.
+- Se agregó edición de **imágenes** (reemplazar/eliminar) e **imágenes con
+  fondo de color** ("formas" vectoriales grandes, tipo banners) como parte de
+  la misma herramienta "Editar contenido", con recuadros de colores distintos
+  (azul=texto, verde=imagen, naranja=forma de color).
+- Al recolorear una forma, se detectó que el texto encima se borraba junto
+  con ella; se corrigió guardando ese texto antes de borrar y reescribiéndolo
+  después en su lugar exacto.
+- Bug real encontrado: comparar botones de un `QMessageBox` por identidad
+  (`is`) en PySide6 puede fallar silenciosamente. Se cambió a comparar por
+  el texto del botón, lo cual resolvió que "Eliminar imagen"/"Reemplazar
+  imagen" no hicieran nada.
+- Se agregó `pagina.clean_contents()` después de cada redacción/borrado de
+  imagen, para evitar errores de "recurso no encontrado" (GS1, GS2, I2) que
+  aparecían tras varias ediciones seguidas en la misma sesión.
+- Se agregó un botón "Usar clic en la página" como alternativa a escribir
+  coordenadas X/Y a mano, para reposicionar texto e imágenes con solo un clic.
+
+**Empaquetado (Fase 8):**
+1. Se instaló PyInstaller en el entorno virtual.
+2. Se generó el ejecutable con:
+   ```
+   pyinstaller --name mi_adobe_editor --windowed --onedir \
+     --collect-all pymupdf --collect-all pdf2docx --collect-all ocrmypdf \
+     app/main.py
+   ```
+3. Se probó exitosamente: el programa abre sin necesitar `venv` activado
+   ni Python visible, directo desde `dist/mi_adobe_editor/mi_adobe_editor`.
+4. Se creó un lanzador de escritorio (`~/.local/share/applications/mi-adobe-editor.desktop`)
+   para que aparezca en el menú de aplicaciones de Linux Mint como cualquier
+   otro programa instalado — confirmado funcionando.
+5. Se documentó en `EMPAQUETADO.md` el mismo proceso para Windows (pendiente
+   de generar y probar en una PC con Windows real, no se puede hacer desde Linux).
+6. Se actualizó `.gitignore` para excluir `build/`, `dist/` y `*.spec`
+   (archivos generados, pesan cientos de MB, no deben subirse al repositorio).
+
+**Resultado:** Editor de PDF funcionando como aplicación de escritorio real
+en Linux Mint, con ícono propio en el menú de aplicaciones. Varios bugs
+importantes de la Fase 4 corregidos y probados contra documentos reales.
+
+**Pendiente para futuras sesiones:**
+- Generar y probar el `.exe` en una PC con Windows real
+- Rellenar formularios PDF, notas tipo "sticky note"
+- Ícono propio del programa (por ahora usa el genérico de PDF del sistema)
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
