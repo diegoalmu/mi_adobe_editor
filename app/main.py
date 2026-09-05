@@ -26,9 +26,10 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QScrollArea, QToolBar, QFileDialog,
     QMessageBox, QComboBox, QInputDialog, QLineEdit, QRubberBand, QStatusBar,
     QWidget, QVBoxLayout, QDialog, QListWidget, QListWidgetItem, QPushButton,
-    QHBoxLayout, QAbstractItemView,
+    QHBoxLayout, QAbstractItemView, QTextEdit, QDoubleSpinBox, QCheckBox,
+    QColorDialog, QFormLayout,
 )
-from PySide6.QtGui import QPixmap, QImage, QAction, QIcon
+from PySide6.QtGui import QPixmap, QImage, QAction, QIcon, QColor, QPainter, QPen
 from PySide6.QtCore import Qt, QRect, QSize, Signal, QTranslator, QLibraryInfo, QLocale
 
 
@@ -128,6 +129,214 @@ class DialogoReordenarPaginas(QDialog):
         """Devuelve la lista de indices originales, en el orden final que quedo tras arrastrar."""
         return [self.lista.item(i).data(Qt.UserRole) for i in range(self.lista.count())]
 
+
+# =========================================================================
+# DIALOGO PARA POSICIONAR/REDIMENSIONAR UNA IMAGEN
+# =========================================================================
+
+class DialogoPosicionarImagen(QDialog):
+    """
+    Deja elegir DONDE va la imagen (posicion X/Y) y que TAMANO tiene
+    (ancho/alto, en puntos del PDF), en vez de forzarla siempre dentro
+    del cuadro exacto de la imagen que se esta reemplazando.
+    """
+
+    def __init__(self, x, y, ancho, alto, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Posicion y tamano de la imagen")
+        self.resize(320, 260)
+
+        layout_principal = QVBoxLayout(self)
+        formulario = QFormLayout()
+
+        self.spin_x = QDoubleSpinBox()
+        self.spin_x.setRange(0, 5000)
+        self.spin_x.setValue(x)
+        formulario.addRow("Posicion X:", self.spin_x)
+
+        self.spin_y = QDoubleSpinBox()
+        self.spin_y.setRange(0, 5000)
+        self.spin_y.setValue(y)
+        formulario.addRow("Posicion Y:", self.spin_y)
+
+        self.spin_ancho = QDoubleSpinBox()
+        self.spin_ancho.setRange(1, 5000)
+        self.spin_ancho.setValue(ancho)
+        formulario.addRow("Ancho:", self.spin_ancho)
+
+        self.spin_alto = QDoubleSpinBox()
+        self.spin_alto.setRange(1, 5000)
+        self.spin_alto.setValue(alto)
+        formulario.addRow("Alto:", self.spin_alto)
+
+        self.check_proporcion = QCheckBox("Mantener proporcion original de la imagen")
+        self.check_proporcion.setChecked(True)
+        formulario.addRow(self.check_proporcion)
+
+        layout_principal.addLayout(formulario)
+
+        self.usar_clic = False
+        boton_usar_clic = QPushButton("📍 Usar clic en la pagina (mas facil)")
+        boton_usar_clic.clicked.connect(self.al_elegir_con_clic)
+        layout_principal.addWidget(boton_usar_clic)
+
+        ayuda = QLabel(
+            "Tip: 'Posicion X/Y' es la esquina superior izquierda, medida "
+            "desde la esquina superior izquierda de la pagina. Si no quieres "
+            "calcular numeros, usa el boton de arriba y luego da clic en la "
+            "pagina donde quieras la imagen."
+        )
+        ayuda.setWordWrap(True)
+        ayuda.setStyleSheet("color: #666; font-style: italic;")
+        layout_principal.addWidget(ayuda)
+
+        fila_botones = QHBoxLayout()
+        boton_cancelar = QPushButton("Cancelar")
+        boton_aceptar = QPushButton("Colocar imagen")
+        boton_cancelar.clicked.connect(self.reject)
+        boton_aceptar.clicked.connect(self.accept)
+        fila_botones.addWidget(boton_cancelar)
+        fila_botones.addWidget(boton_aceptar)
+        layout_principal.addLayout(fila_botones)
+
+    def al_elegir_con_clic(self):
+        self.usar_clic = True
+        self.accept()
+
+    def obtener_valores(self):
+        return {
+            "x": self.spin_x.value(),
+            "y": self.spin_y.value(),
+            "ancho": self.spin_ancho.value(),
+            "alto": self.spin_alto.value(),
+            "mantener_proporcion": self.check_proporcion.isChecked(),
+            "usar_clic": self.usar_clic,
+        }
+
+
+# =========================================================================
+# DIALOGO PARA EDITAR UN "CUADRO DE TEXTO" (texto que ya existia en el PDF)
+# =========================================================================
+
+class DialogoEditarCuadroDeTexto(QDialog):
+    """
+    Ventana tipo "cuadro de texto" de Adobe Acrobat: muestra el texto del
+    parrafo detectado y deja cambiar texto, tamano de letra, color,
+    negrita, cursiva, y el ancho/alto del cuadro (en puntos del PDF).
+    """
+
+    def __init__(self, texto, tamano, color_rgb_0_255, negrita, cursiva, x, y, ancho, alto, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Editar cuadro de texto")
+        self.resize(480, 460)
+        self.color_actual = QColor(*[int(c) for c in color_rgb_0_255])
+
+        layout_principal = QVBoxLayout(self)
+
+        layout_principal.addWidget(QLabel("Texto:"))
+        self.caja_texto = QTextEdit()
+        self.caja_texto.setPlainText(texto)
+        layout_principal.addWidget(self.caja_texto)
+
+        formulario = QFormLayout()
+
+        self.spin_tamano = QDoubleSpinBox()
+        self.spin_tamano.setRange(1, 300)
+        self.spin_tamano.setValue(tamano)
+        formulario.addRow("Tamano de letra:", self.spin_tamano)
+
+        self.boton_color = QPushButton()
+        self.actualizar_boton_color()
+        self.boton_color.clicked.connect(self.elegir_color)
+        formulario.addRow("Color del texto:", self.boton_color)
+
+        fila_estilo = QHBoxLayout()
+        self.check_negrita = QCheckBox("Negrita")
+        self.check_negrita.setChecked(negrita)
+        self.check_cursiva = QCheckBox("Cursiva")
+        self.check_cursiva.setChecked(cursiva)
+        fila_estilo.addWidget(self.check_negrita)
+        fila_estilo.addWidget(self.check_cursiva)
+        formulario.addRow("Estilo:", fila_estilo)
+
+        self.spin_x = QDoubleSpinBox()
+        self.spin_x.setRange(0, 5000)
+        self.spin_x.setValue(x)
+        formulario.addRow("Posicion X:", self.spin_x)
+
+        self.spin_y = QDoubleSpinBox()
+        self.spin_y.setRange(0, 5000)
+        self.spin_y.setValue(y)
+        formulario.addRow("Posicion Y:", self.spin_y)
+
+        self.spin_ancho = QDoubleSpinBox()
+        self.spin_ancho.setRange(10, 2000)
+        self.spin_ancho.setValue(ancho)
+        formulario.addRow("Ancho del cuadro (puntos):", self.spin_ancho)
+
+        self.spin_alto = QDoubleSpinBox()
+        self.spin_alto.setRange(10, 2000)
+        self.spin_alto.setValue(alto)
+        formulario.addRow("Alto del cuadro (puntos):", self.spin_alto)
+
+        layout_principal.addLayout(formulario)
+
+        self.usar_clic = False
+        boton_usar_clic = QPushButton("📍 Usar clic en la pagina (mas facil)")
+        boton_usar_clic.clicked.connect(self.al_elegir_con_clic)
+        layout_principal.addWidget(boton_usar_clic)
+
+        ayuda = QLabel(
+            "Tip: si el texto no cabe en el cuadro, agranda el ancho/alto o "
+            "reduce el tamano de letra. Si no quieres calcular la Posicion "
+            "X/Y a mano, usa el boton de arriba y luego da clic en la pagina "
+            "donde quieras que quede el texto."
+        )
+        ayuda.setWordWrap(True)
+        ayuda.setStyleSheet("color: #666; font-style: italic;")
+        layout_principal.addWidget(ayuda)
+
+        fila_botones = QHBoxLayout()
+        boton_cancelar = QPushButton("Cancelar")
+        boton_aceptar = QPushButton("Aplicar cambios")
+        boton_cancelar.clicked.connect(self.reject)
+        boton_aceptar.clicked.connect(self.accept)
+        fila_botones.addWidget(boton_cancelar)
+        fila_botones.addWidget(boton_aceptar)
+        layout_principal.addLayout(fila_botones)
+
+    def al_elegir_con_clic(self):
+        self.usar_clic = True
+        self.accept()
+
+    def actualizar_boton_color(self):
+        self.boton_color.setText(self.color_actual.name())
+        self.boton_color.setStyleSheet(
+            f"background-color: {self.color_actual.name()}; "
+            f"color: {'white' if self.color_actual.lightness() < 128 else 'black'};"
+        )
+
+    def elegir_color(self):
+        color_elegido = QColorDialog.getColor(self.color_actual, self, "Elige el color del texto")
+        if color_elegido.isValid():
+            self.color_actual = color_elegido
+            self.actualizar_boton_color()
+
+    def obtener_valores(self):
+        return {
+            "texto": self.caja_texto.toPlainText(),
+            "tamano": self.spin_tamano.value(),
+            "color": (self.color_actual.red(), self.color_actual.green(), self.color_actual.blue()),
+            "negrita": self.check_negrita.isChecked(),
+            "cursiva": self.check_cursiva.isChecked(),
+            "x": self.spin_x.value(),
+            "y": self.spin_y.value(),
+            "ancho": self.spin_ancho.value(),
+            "alto": self.spin_alto.value(),
+            "usar_clic": self.usar_clic,
+        }
+
+
 ESPACIO_ENTRE_PAGINAS = 15  # pixeles de separacion visual entre una pagina y la siguiente
 
 
@@ -137,10 +346,14 @@ ESPACIO_ENTRE_PAGINAS = 15  # pixeles de separacion visual entre una pagina y la
 
 class EtiquetaPDF(QLabel):
     """
-    Muestra UNA pagina del PDF y detecta arrastres de mouse sobre ELLA
+    Muestra UNA pagina del PDF y detecta clics/arrastres de mouse sobre ELLA
     para colocar anotaciones. Cada instancia "sabe" su propio numero de
     pagina (self.numero_pagina), asi que no importa que haya muchas
     paginas en pantalla a la vez: siempre se anota la correcta.
+
+    Tambien puede guardar una copia "limpia" de su imagen (sin cuadros
+    dibujados encima) para poder mostrar/quitar los recuadros de texto
+    detectados sin tener que volver a leer el PDF cada vez.
     """
 
     # Envia: (numero_de_pagina, rectangulo_en_pixeles_de_esa_pagina)
@@ -152,6 +365,7 @@ class EtiquetaPDF(QLabel):
         self.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.punto_inicio = None
         self.rubber_band = QRubberBand(QRubberBand.Rectangle, self)
+        self.pixmap_limpio = None  # se llena cada vez que se dibuja la pagina normalmente
 
     def mousePressEvent(self, evento):
         self.punto_inicio = evento.position().toPoint()
@@ -168,8 +382,10 @@ class EtiquetaPDF(QLabel):
             rect = QRect(self.punto_inicio, evento.position().toPoint()).normalized()
             self.rubber_band.hide()
             self.punto_inicio = None
-            if rect.width() > 4 or rect.height() > 4:
-                self.seleccion_lista.emit(self.numero_pagina, rect)
+            # Ya no exigimos un tamano minimo: un simple CLIC (sin arrastrar)
+            # tambien cuenta, para poder dar clic directo sobre un recuadro
+            # de texto ya detectado, sin tener que arrastrar nada.
+            self.seleccion_lista.emit(self.numero_pagina, rect)
 
 
 # =========================================================================
@@ -188,7 +404,7 @@ class EditorPDF(QMainWindow):
         "Linea",
         "Circulo",
         "Firma (imagen)",
-        "Editar texto existente",
+        "Editar contenido (texto e imagenes)",
     ]
 
     def __init__(self):
@@ -197,6 +413,7 @@ class EditorPDF(QMainWindow):
         self.documento = None
         self.ruta_actual = None
         self.ruta_firma = None          # ruta a la imagen de firma cargada por el usuario
+        self.accion_pendiente_por_clic = None  # si no es None, el PROXIMO clic en la pagina ejecuta esto
         self.zoom = 1.5
         self.pagina_actual = 0          # pagina que se considera "visible" ahora mismo
         self.etiquetas_paginas = []      # lista de EtiquetaPDF, una por pagina
@@ -295,7 +512,7 @@ class EditorPDF(QMainWindow):
         barra.addWidget(QLabel(" Herramienta: "))
         self.combo_herramienta = QComboBox()
         self.combo_herramienta.addItems(self.HERRAMIENTAS)
-        self.combo_herramienta.currentTextChanged.connect(self.actualizar_ayuda)
+        self.combo_herramienta.currentTextChanged.connect(self.al_cambiar_herramienta)
         barra.addWidget(self.combo_herramienta)
 
     def agregar_boton(self, barra, texto, funcion):
@@ -303,6 +520,13 @@ class EditorPDF(QMainWindow):
         accion.triggered.connect(funcion)
         barra.addAction(accion)
         return accion
+
+    def al_cambiar_herramienta(self, herramienta_nueva):
+        """Se dispara cada vez que el usuario cambia la herramienta del desplegable."""
+        self.actualizar_ayuda()
+        # Activamos/desactivamos los recuadros azules automaticos de texto
+        # solo cuando entramos o salimos de "Editar contenido (texto e imagenes)".
+        self.alternar_cajas_de_texto(herramienta_nueva == "Editar contenido (texto e imagenes)")
 
     def actualizar_ayuda(self, *_):
         herramienta = self.combo_herramienta.currentText() if hasattr(self, "combo_herramienta") else "Ninguna (solo ver)"
@@ -316,7 +540,7 @@ class EditorPDF(QMainWindow):
             "Linea": "Arrastra desde el inicio hasta el final de la linea.",
             "Circulo": "Arrastra para dibujar un circulo/ovalo.",
             "Firma (imagen)": "Arrastra un cuadro donde quieras colocar tu firma (cargala antes con 'Cargar firma...').",
-            "Editar texto existente": "Arrastra un cuadro AJUSTADO sobre el texto que ya existe y quieras cambiar. Se tapara el texto viejo y se escribira el nuevo en su lugar.",
+            "Editar contenido (texto e imagenes)": "Recuadros AZULES = texto, VERDES = imagenes. Da clic dentro de cualquiera para editarlo (no hace falta arrastrar).",
         }
         self.statusBar().showMessage(mensajes.get(herramienta, ""))
 
@@ -400,6 +624,7 @@ class EditorPDF(QMainWindow):
 
                 etiqueta = EtiquetaPDF(numero)
                 etiqueta.setPixmap(pixmap_qt)
+                etiqueta.pixmap_limpio = pixmap_qt
                 etiqueta.setFixedSize(pixmap_qt.size())
                 etiqueta.seleccion_lista.connect(self.al_seleccionar_rectangulo)
 
@@ -428,6 +653,11 @@ class EditorPDF(QMainWindow):
         self.pagina_actual = max(0, min(self.pagina_actual, len(self.documento) - 1))
         self.actualizar_indicador_pagina()
         self.setWindowTitle(f"Mi Adobe PDF - {len(self.documento)} paginas")
+
+        # Si el usuario ya tenia activa la herramienta de editar texto,
+        # dibujamos de una vez los recuadros sobre las paginas nuevas.
+        if hasattr(self, "combo_herramienta") and self.combo_herramienta.currentText() == "Editar contenido (texto e imagenes)":
+            self.alternar_cajas_de_texto(True)
 
     def al_hacer_scroll(self, valor_scroll):
         """Se dispara cada vez que el usuario mueve la barra de scroll (o hace scroll con la rueda)."""
@@ -468,15 +698,25 @@ class EditorPDF(QMainWindow):
         if self.documento is None:
             return
 
-        herramienta = self.combo_herramienta.currentText()
-        if herramienta == "Ninguna (solo ver)":
-            return
-
         x0 = rect_pixeles.left() / self.zoom
         y0 = rect_pixeles.top() / self.zoom
         x1 = rect_pixeles.right() / self.zoom
         y1 = rect_pixeles.bottom() / self.zoom
         rect_pdf = fitz.Rect(x0, y0, x1, y1)
+
+        # Si hay una accion esperando a que el usuario de clic en la pagina
+        # (por ejemplo, "elige donde poner la imagen"), este es ESE clic:
+        # ejecutamos la accion pendiente y no seguimos con el flujo normal.
+        if self.accion_pendiente_por_clic is not None:
+            accion = self.accion_pendiente_por_clic
+            self.accion_pendiente_por_clic = None
+            self.statusBar().clearMessage()
+            accion(numero_pagina, rect_pdf.tl)
+            return
+
+        herramienta = self.combo_herramienta.currentText()
+        if herramienta == "Ninguna (solo ver)":
+            return
 
         pagina = self.documento[numero_pagina]
 
@@ -505,11 +745,21 @@ class EditorPDF(QMainWindow):
                     )
                     return
                 pagina.insert_image(rect_pdf, filename=self.ruta_firma)
-            elif herramienta == "Editar texto existente":
-                self.editar_texto_existente(pagina, rect_pdf)
+            elif herramienta == "Editar contenido (texto e imagenes)":
+                self.editar_contenido_en_punto(pagina, rect_pdf)
 
             # Solo hace falta re-dibujar la pagina afectada, no todas (mas rapido)
             self.redibujar_pagina_individual(numero_pagina)
+
+            # Si seguimos en modo "Editar contenido (texto e imagenes)", refrescamos los
+            # recuadros azules de ESA pagina (las posiciones pudieron cambiar).
+            if herramienta == "Editar contenido (texto e imagenes)":
+                etiqueta = self.etiquetas_paginas[numero_pagina]
+                if etiqueta is not None and etiqueta.pixmap_limpio is not None:
+                    parrafos = self.obtener_todos_los_parrafos(pagina)
+                    imagenes = self.obtener_todas_las_imagenes(pagina)
+                    formas = self.obtener_formas_de_color(pagina)
+                    etiqueta.setPixmap(self.dibujar_cajas_de_texto(etiqueta.pixmap_limpio, parrafos, imagenes, formas))
         except Exception as error:
             QMessageBox.critical(self, "No se pudo agregar la anotacion", str(error))
 
@@ -526,6 +776,7 @@ class EditorPDF(QMainWindow):
                 pixmap_fitz.stride, QImage.Format_RGB888,
             )
             pixmap_qt = QPixmap.fromImage(imagen_qt)
+            etiqueta_objetivo.pixmap_limpio = pixmap_qt
             etiqueta_objetivo.setPixmap(pixmap_qt)
         except Exception as error:
             QMessageBox.warning(self, "No se pudo actualizar la vista", str(error))
@@ -535,67 +786,608 @@ class EditorPDF(QMainWindow):
     # la que este marcada en el indicador en ese momento)
     # ---------------------------------------------------------------
 
-    def editar_texto_existente(self, pagina, rect_pdf):
-        """
-        Busca que texto REAL existe dentro del rectangulo que arrastro el usuario,
-        muestra un dialogo para editarlo, y si confirma, tapa el texto viejo y
-        escribe el texto nuevo en su lugar (con el mismo tamano y color detectados).
-
-        IMPORTANTE (limitacion real de los PDFs, explicada tambien en el ROADMAP):
-        esto NO "mueve" el resto del texto de la pagina como en Word. Si el texto
-        nuevo es mucho mas largo que el viejo, puede no caber bien en el mismo
-        espacio. Funciona mejor para cambios cortos (precios, fechas, nombres, etc.)
-        """
-        info = pagina.get_text("dict", clip=rect_pdf)
-
-        texto_actual = ""
-        tamano = 12
-        color_rgb = (0, 0, 0)
-        fuente_en_negrita = False
-
+    def obtener_lineas_de_pagina(self, pagina):
+        """Devuelve TODAS las lineas de texto de la pagina, ordenadas de arriba a abajo."""
+        info = pagina.get_text("dict")
+        lineas = []
         for bloque in info.get("blocks", []):
+            if bloque.get("type") != 0:
+                continue
             for linea in bloque.get("lines", []):
-                for span in linea.get("spans", []):
-                    texto_actual += span["text"]
-                    tamano = span["size"]
-                    codigo_color = span["color"]
-                    color_rgb = (
-                        ((codigo_color >> 16) & 255) / 255,
-                        ((codigo_color >> 8) & 255) / 255,
-                        (codigo_color & 255) / 255,
-                    )
-                    fuente_en_negrita = "bold" in span.get("font", "").lower()
+                texto = "".join(span["text"] for span in linea["spans"])
+                if not texto.strip():
+                    continue
+                primer_span = linea["spans"][0]
+                lineas.append({
+                    "bbox": fitz.Rect(linea["bbox"]),
+                    "texto": texto,
+                    "size": primer_span["size"],
+                    "color": primer_span["color"],
+                    "font": primer_span.get("font", ""),
+                    "origen": primer_span.get("origin"),  # punto EXACTO de la linea base original
+                })
+        lineas.sort(key=lambda l: l["bbox"].y0)
+        return lineas
 
-        if not texto_actual.strip():
-            QMessageBox.information(
-                self, "No se encontro texto",
-                "No detecte texto existente dentro del recuadro que dibujaste. "
-                "Intenta arrastrar un cuadro mas ajustado, justo sobre las letras.\n\n"
-                "(Si el PDF es una imagen escaneada, primero usa Archivo -> "
-                "Hacer PDF buscable (OCR), y guarda ese resultado antes de editarlo)."
+    # IMPORTANTE: este numero decide cuando dos lineas pegadas se consideran
+    # "el mismo parrafo" vs "parrafos distintos". Se ajusto usando documentos
+    # reales: un espacio normal ENTRE lineas de un mismo parrafo es muy chico
+    # (2-3 puntos); el espacio ENTRE parrafos distintos suele ser bastante
+    # mayor (8+ puntos). 0.5 veces la altura de la linea separa bien ambos casos
+    # en la mayoria de documentos (Word, Canva, InDesign).
+    # IMPORTANTE: estos ajustes deciden cuando dos lineas pegadas se consideran
+    # "el mismo parrafo" vs "parrafos distintos".
+    #
+    # Aprendizaje real (con documentos reales del usuario): el ESPACIADO entre
+    # lineas casi nunca sirve para detectar el fin de un parrafo, porque muchos
+    # documentos (Word, InDesign) usan el MISMO interlineado entre parrafos que
+    # dentro de un parrafo (sin renglon en blanco de por medio).
+    #
+    # La senal que SI funciona: en un parrafo normal, todas las lineas llegan
+    # casi hasta el mismo margen derecho ("linea llena"), EXCEPTO la ULTIMA
+    # linea del parrafo, que termina antes porque ahi se acaba el texto.
+    # Por eso: si la linea anterior NO llego a su margen derecho tipico,
+    # asumimos que ahi terminaba un parrafo, y la siguiente linea (aunque
+    # tenga el mismo tamano/margen izquierdo) empieza uno nuevo.
+    TOLERANCIA_MARGEN_IZQUIERDO = 40
+    TOLERANCIA_MARGEN_DERECHO = 20
+    MULTIPLICADOR_ESPACIO_MAXIMO = 1.8  # si el hueco es MUCHO mayor a una linea, sin duda es otro parrafo
+
+    # Ancho minimo (en puntos) para que una linea pueda considerarse parte de
+    # un PARRAFO que sigue en la siguiente linea. Evita el error de mezclar
+    # etiquetas cortas sueltas (ej. "Terminado", "Pantalla" en una ficha
+    # tecnica) que por casualidad comparten tamano/margen y estan cerca,
+    # pero NO son continuacion la una de la otra.
+    ANCHO_MINIMO_PARA_CONTINUAR = 120
+
+    def lineas_son_compatibles(self, a, b):
+        mismo_tamano = abs(a["size"] - b["size"]) < 1.0
+        mismo_margen = abs(a["bbox"].x0 - b["bbox"].x0) < self.TOLERANCIA_MARGEN_IZQUIERDO
+        return mismo_tamano and mismo_margen
+
+    def combinar_lineas_en_parrafo(self, lineas_del_grupo):
+        seleccionadas = sorted(lineas_del_grupo, key=lambda l: l["bbox"].y0)
+        bbox_total = seleccionadas[0]["bbox"]
+        for l in seleccionadas[1:]:
+            bbox_total |= l["bbox"]
+        return {
+            "bbox": bbox_total,
+            "texto": " ".join(l["texto"] for l in seleccionadas),
+            "size": seleccionadas[0]["size"],
+            "color": seleccionadas[0]["color"],
+            "font": seleccionadas[0]["font"],
+            "num_lineas": len(seleccionadas),
+            "origen": seleccionadas[0]["origen"],  # solo se usa si num_lineas == 1
+        }
+
+    def obtener_todos_los_parrafos(self, pagina):
+        """
+        Recorre TODA la pagina de arriba a abajo y arma la lista de parrafos,
+        uniendo lineas consecutivas mientras: tengan el mismo tamano/margen
+        izquierdo, el espacio entre ellas sea normal, Y la linea anterior haya
+        llegado hasta su margen derecho tipico (si no llego, ahi termino un parrafo).
+        """
+        lineas = self.obtener_lineas_de_pagina(pagina)
+        if not lineas:
+            return []
+
+        grupos = [[lineas[0]]]
+        ancho_tipico_grupo = lineas[0]["bbox"].x1
+
+        for anterior, actual in zip(lineas, lineas[1:]):
+            espacio = actual["bbox"].y0 - anterior["bbox"].y1
+            espacio_normal = espacio < anterior["bbox"].height * self.MULTIPLICADOR_ESPACIO_MAXIMO
+            linea_anterior_llego_al_margen = (
+                ancho_tipico_grupo - anterior["bbox"].x1
+            ) < self.TOLERANCIA_MARGEN_DERECHO
+            # La linea anterior debe ser "larga" de verdad para confiar en que
+            # es texto corrido (evita mezclar etiquetas cortas sueltas).
+            linea_anterior_es_larga = anterior["bbox"].width >= self.ANCHO_MINIMO_PARA_CONTINUAR
+
+            if (
+                self.lineas_son_compatibles(anterior, actual)
+                and espacio_normal
+                and linea_anterior_llego_al_margen
+                and linea_anterior_es_larga
+            ):
+                grupos[-1].append(actual)
+                ancho_tipico_grupo = max(ancho_tipico_grupo, actual["bbox"].x1)
+            else:
+                grupos.append([actual])
+                ancho_tipico_grupo = actual["bbox"].x1
+
+        return [self.combinar_lineas_en_parrafo(grupo) for grupo in grupos]
+
+    def encontrar_parrafo_en_punto(self, pagina, punto):
+        """Encuentra, dentro de todos los parrafos de la pagina, el que contiene ese punto."""
+        for parrafo in self.obtener_todos_los_parrafos(pagina):
+            bbox = parrafo["bbox"]
+            if bbox.x0 - 2 <= punto.x <= bbox.x1 + 2 and bbox.y0 - 2 <= punto.y <= bbox.y1 + 2:
+                return parrafo
+        return None
+
+    def obtener_todas_las_imagenes(self, pagina):
+        """Devuelve una lista de {'bbox': fitz.Rect, 'xref': int} por cada imagen de la pagina."""
+        imagenes = []
+        for info in pagina.get_image_info(xrefs=True):
+            if info.get("xref"):  # 0 significa que no se pudo identificar el objeto
+                imagenes.append({"bbox": fitz.Rect(info["bbox"]), "xref": info["xref"]})
+        return imagenes
+
+    # Una pagina puede tener CIENTOS de formas vectoriales chiquitas (las
+    # lineas de una grafica, por ejemplo). Solo nos interesan los RELLENOS
+    # DE COLOR grandes (banners, fondos), no cada segmento de linea suelto.
+    ANCHO_MINIMO_FORMA = 15
+    ALTO_MINIMO_FORMA = 15
+
+    def obtener_formas_de_color(self, pagina):
+        """
+        Devuelve los RECTANGULOS DE COLOR (rellenos solidos, sin contar lineas
+        ni bordes) que sean lo bastante grandes como para ser un "banner" o
+        "fondo" editable de verdad, con su color de relleno actual.
+        """
+        formas = []
+        for dibujo in pagina.get_drawings():
+            if dibujo.get("type") != "f" or dibujo.get("fill") is None:
+                continue
+            rect = fitz.Rect(dibujo["rect"])
+            if rect.width >= self.ANCHO_MINIMO_FORMA and rect.height >= self.ALTO_MINIMO_FORMA:
+                formas.append({"bbox": rect, "color": dibujo["fill"]})
+        return formas
+
+    def dibujar_cajas_de_texto(self, pixmap_base, parrafos, imagenes=None, formas=None):
+        """
+        Devuelve una COPIA del pixmap con un recuadro AZUL alrededor de cada
+        parrafo de texto, VERDE alrededor de cada imagen, y NARANJA alrededor
+        de cada forma/rectangulo de color grande (banners, fondos) - igual
+        que el modo "Editar PDF" de Acrobat marca cada elemento seleccionable.
+        """
+        resultado = QPixmap(pixmap_base)
+        pintor = QPainter(resultado)
+
+        if formas:
+            lapiz_forma = QPen(QColor(255, 127, 39))  # naranja
+            lapiz_forma.setWidth(2)
+            pintor.setPen(lapiz_forma)
+            for forma in formas:
+                bbox = forma["bbox"]
+                rect_pixeles = QRect(
+                    int(bbox.x0 * self.zoom), int(bbox.y0 * self.zoom),
+                    int(bbox.width * self.zoom), int(bbox.height * self.zoom),
+                )
+                pintor.drawRect(rect_pixeles)
+
+        lapiz_texto = QPen(QColor(30, 144, 255))  # azul
+        lapiz_texto.setWidth(2)
+        pintor.setPen(lapiz_texto)
+        for parrafo in parrafos:
+            bbox = parrafo["bbox"]
+            rect_pixeles = QRect(
+                int(bbox.x0 * self.zoom), int(bbox.y0 * self.zoom),
+                int(bbox.width * self.zoom), int(bbox.height * self.zoom),
             )
+            pintor.drawRect(rect_pixeles)
+
+        if imagenes:
+            lapiz_imagen = QPen(QColor(34, 177, 76))  # verde
+            lapiz_imagen.setWidth(2)
+            pintor.setPen(lapiz_imagen)
+            for imagen in imagenes:
+                bbox = imagen["bbox"]
+                rect_pixeles = QRect(
+                    int(bbox.x0 * self.zoom), int(bbox.y0 * self.zoom),
+                    int(bbox.width * self.zoom), int(bbox.height * self.zoom),
+                )
+                pintor.drawRect(rect_pixeles)
+
+        pintor.end()
+        return resultado
+
+    def alternar_cajas_de_texto(self, activar):
+        """
+        Se llama cuando el usuario elige (o deja de elegir) la herramienta
+        "Editar contenido (texto e imagenes)". Si se activa, dibuja
+        automaticamente un recuadro azul sobre cada parrafo de texto, uno
+        verde sobre cada imagen, y uno naranja sobre cada forma/banner de
+        color, en todas las paginas visibles. Si se desactiva, regresa las
+        paginas a su vista normal.
+        """
+        if self.documento is None:
+            return
+        for numero, etiqueta in enumerate(self.etiquetas_paginas):
+            if etiqueta is None or etiqueta.pixmap_limpio is None:
+                continue
+            if activar:
+                pagina = self.documento[numero]
+                parrafos = self.obtener_todos_los_parrafos(pagina)
+                imagenes = self.obtener_todas_las_imagenes(pagina)
+                formas = self.obtener_formas_de_color(pagina)
+                etiqueta.setPixmap(self.dibujar_cajas_de_texto(etiqueta.pixmap_limpio, parrafos, imagenes, formas))
+            else:
+                etiqueta.setPixmap(etiqueta.pixmap_limpio)
+
+    def muestrear_color_de_fondo(self, pagina, bbox):
+        """
+        En vez de asumir que el fondo detras del texto siempre es blanco
+        (que rompia titulos con fondo de color, como banners azules),
+        tomamos una "foto" chiquita justo a los lados del texto y leemos
+        de que color es el fondo ahi de verdad.
+        """
+        try:
+            margen = 6
+            clip = fitz.Rect(
+                max(0, bbox.x0 - margen), bbox.y0,
+                min(pagina.rect.width, bbox.x1 + margen), bbox.y1,
+            )
+            if clip.width <= 0 or clip.height <= 0:
+                return (1, 1, 1)
+            pix = pagina.get_pixmap(clip=clip, matrix=fitz.Matrix(2, 2))
+            y_medio = max(0, min(pix.height - 1, pix.height // 2))
+            color_izquierda = pix.pixel(1, y_medio)
+            color_derecha = pix.pixel(max(0, pix.width - 2), y_medio)
+
+            # Nos quedamos con el que este MAS LEJOS de blanco puro, porque
+            # si uno de los dos lados cayo fuera del banner/fondo de color
+            # (por accidente) va a salir blanco y no nos sirve.
+            def distancia_a_blanco(c):
+                return sum(255 - v for v in c[:3])
+
+            elegido = color_izquierda if distancia_a_blanco(color_izquierda) >= distancia_a_blanco(color_derecha) else color_derecha
+            return tuple(v / 255 for v in elegido[:3])
+        except Exception:
+            return (1, 1, 1)  # si algo falla, blanco es el valor seguro de siempre
+
+    def texto_cabe_en_cuadro(self, texto, rect, tamano, fuente):
+        """
+        Prueba si un texto cabe en un rectangulo dado, con cierto tamano y
+        fuente, PERO haciendolo en un documento PDF temporal descartable,
+        para no arriesgar el documento real del usuario. Devuelve True/False.
+        """
+        documento_prueba = fitz.open()
+        try:
+            pagina_prueba = documento_prueba.new_page(
+                width=max(rect.width, 10) + 20, height=max(rect.height, 10) + 20
+            )
+            rect_prueba = fitz.Rect(0, 0, rect.width, rect.height)
+            resultado = pagina_prueba.insert_textbox(
+                rect_prueba, texto, fontsize=tamano, fontname=fuente, align=0,
+            )
+            return resultado >= 0
+        finally:
+            documento_prueba.close()
+
+    def calcular_espacio_disponible_vertical(self, pagina, bbox_objetivo):
+        """
+        Mide cuanto espacio libre hay ARRIBA y ABAJO de un bbox, antes de
+        chocar con la linea de texto mas cercana en esa direccion (que no
+        sea parte del propio parrafo). Sirve para nunca invadir texto vecino
+        al agregar margen de seguridad.
+        """
+        espacio_arriba = None
+        espacio_abajo = None
+        for linea in self.obtener_lineas_de_pagina(pagina):
+            b = linea["bbox"]
+            if b.y1 <= bbox_objetivo.y0 + 0.5:
+                hueco = bbox_objetivo.y0 - b.y1
+                if espacio_arriba is None or hueco < espacio_arriba:
+                    espacio_arriba = hueco
+            elif b.y0 >= bbox_objetivo.y1 - 0.5:
+                hueco = b.y0 - bbox_objetivo.y1
+                if espacio_abajo is None or hueco < espacio_abajo:
+                    espacio_abajo = hueco
+        return espacio_arriba, espacio_abajo
+
+    def editar_contenido_en_punto(self, pagina, rect_pdf):
+        """
+        Punto de entrada unico para la herramienta "Editar contenido": decide
+        si el clic cayo sobre una IMAGEN, un PARRAFO DE TEXTO, o una FORMA/
+        BANNER DE COLOR, y manda a la funcion correspondiente. Asi el usuario
+        no tiene que elegir un modo distinto para cada cosa, como en Acrobat.
+        """
+        punto = rect_pdf.tl + (rect_pdf.br - rect_pdf.tl) * 0.5
+
+        for imagen in self.obtener_todas_las_imagenes(pagina):
+            if imagen["bbox"].contains(punto):
+                self.editar_imagen(pagina, imagen)
+                return
+
+        parrafo = self.encontrar_parrafo_en_punto(pagina, punto)
+        if parrafo is not None:
+            self.editar_parrafo_encontrado(pagina, parrafo)
             return
 
-        texto_nuevo, ok = QInputDialog.getText(
-            self, "Editar texto existente",
-            "Texto detectado (edítalo y presiona Aceptar):",
-            text=texto_actual,
+        for forma in self.obtener_formas_de_color(pagina):
+            if forma["bbox"].contains(punto):
+                self.editar_forma(pagina, forma)
+                return
+
+        QMessageBox.information(
+            self, "No se encontro nada editable ahi",
+            "Ahi no hay texto, imagen, ni forma de color detectados (fijate "
+            "en los recuadros: AZUL=texto, VERDE=imagen, NARANJA=forma de "
+            "color; da clic DENTRO de alguno).\n\n"
+            "(Si el PDF es una imagen escaneada, primero usa Archivo -> "
+            "Hacer PDF buscable (OCR), y guarda ese resultado antes de editarlo)."
         )
-        if not ok or texto_nuevo == texto_actual:
+
+    def editar_forma(self, pagina, forma):
+        """
+        Cambia el color de relleno de una forma/banner, PRESERVANDO cualquier
+        texto que estuviera dibujado encima (se guarda antes de borrar, y se
+        vuelve a escribir despues, en su mismo lugar exacto).
+        """
+        bbox = forma["bbox"]
+        color_actual = QColor(*[int(c * 255) for c in forma["color"]])
+
+        color_nuevo = QColorDialog.getColor(color_actual, self, "Elige el nuevo color de la forma")
+        if not color_nuevo.isValid():
             return
 
         try:
-            fuente = "helv-bold" if fuente_en_negrita else "helv"
-            # add_redact_annot marca la zona para "borrar de verdad" el contenido
-            # original (no solo taparlo visualmente) y opcionalmente escribe
-            # texto nuevo ahi mismo cuando se aplica con apply_redactions().
-            pagina.add_redact_annot(
-                rect_pdf, text=texto_nuevo, fontsize=tamano,
-                fontname=fuente, text_color=color_rgb, align=0,
-            )
+            # Guardamos cualquier texto que este ENCIMA de esta forma, para
+            # poder volver a escribirlo despues (si no, se perderia).
+            texto_encima = [
+                linea for linea in self.obtener_lineas_de_pagina(pagina)
+                if bbox.intersects(linea["bbox"])
+            ]
+
+            color_normalizado = (color_nuevo.redF(), color_nuevo.greenF(), color_nuevo.blueF())
+            pagina.add_redact_annot(bbox, fill=color_normalizado)
             pagina.apply_redactions()
+            pagina.clean_contents()  # evita referencias colgando tras editar
+
+            for linea in texto_encima:
+                codigo_color = linea["color"]
+                color_texto = (
+                    ((codigo_color >> 16) & 255) / 255,
+                    ((codigo_color >> 8) & 255) / 255,
+                    (codigo_color & 255) / 255,
+                )
+                nombre_fuente = linea["font"].lower()
+                if "bold" in nombre_fuente and ("italic" in nombre_fuente or "oblique" in nombre_fuente):
+                    fuente = "hebi"
+                elif "bold" in nombre_fuente:
+                    fuente = "hebo"
+                elif "italic" in nombre_fuente or "oblique" in nombre_fuente:
+                    fuente = "heit"
+                else:
+                    fuente = "helv"
+                pagina.insert_text(
+                    linea["origen"], linea["texto"], fontsize=linea["size"],
+                    fontname=fuente, color=color_texto,
+                )
+        except Exception as error:
+            QMessageBox.critical(self, "Error al cambiar el color", str(error))
+
+    def editar_parrafo_encontrado(self, pagina, parrafo):
+        """
+        Abre la ventana de "cuadro de texto" para un parrafo YA detectado
+        (la busqueda del parrafo la hace editar_contenido_en_punto).
+        """
+        bbox_detectado = parrafo["bbox"]
+        es_una_sola_linea = parrafo["num_lineas"] == 1
+
+        if es_una_sola_linea:
+            # CASO MAS SEGURO (fichas tecnicas, etiquetas, precios, una sola
+            # linea de texto): en vez de "adivinar" un cuadro con margen,
+            # usamos el punto EXACTO donde ya estaba dibujada esa linea
+            # (PyMuPDF lo guarda como "origen"). Asi no hace falta invadir
+            # el espacio de las lineas vecinas para nada.
+            bbox_real = bbox_detectado
+        else:
+            # Parrafos de VARIAS lineas (texto corrido): aqui si hace falta
+            # un poco de margen vertical para que insert_textbox pueda
+            # re-acomodar el texto, pero SOLO hasta donde haya espacio
+            # libre real (nunca invadimos la linea de arriba/abajo).
+            espacio_arriba, espacio_abajo = self.calcular_espacio_disponible_vertical(pagina, bbox_detectado)
+            margen_deseado = bbox_detectado.height * 0.15 + 2
+            margen_arriba = max(0, min(margen_deseado, (espacio_arriba - 1.5) if espacio_arriba is not None else margen_deseado))
+            margen_abajo = max(0, min(margen_deseado, (espacio_abajo - 1.5) if espacio_abajo is not None else margen_deseado))
+            bbox_real = fitz.Rect(
+                bbox_detectado.x0 - 2, bbox_detectado.y0 - margen_arriba,
+                bbox_detectado.x1 + 6, bbox_detectado.y1 + margen_abajo,
+            )
+
+        texto_actual = parrafo["texto"]
+        tamano_actual = parrafo["size"]
+        codigo_color = parrafo["color"]
+        color_actual = (
+            (codigo_color >> 16) & 255, (codigo_color >> 8) & 255, codigo_color & 255,
+        )
+        nombre_fuente = parrafo["font"].lower()
+        negrita_actual = "bold" in nombre_fuente
+        cursiva_actual = "italic" in nombre_fuente or "oblique" in nombre_fuente
+
+        dialogo = DialogoEditarCuadroDeTexto(
+            texto_actual, tamano_actual, color_actual, negrita_actual, cursiva_actual,
+            parrafo["origen"][0] if es_una_sola_linea else bbox_real.x0,
+            parrafo["origen"][1] if es_una_sola_linea else bbox_real.y0,
+            bbox_real.width, bbox_real.height, parent=self,
+        )
+        if dialogo.exec() != QDialog.Accepted:
+            return
+
+        datos = dialogo.obtener_valores()
+
+        if datos["negrita"] and datos["cursiva"]:
+            fuente = "hebi"
+        elif datos["negrita"]:
+            fuente = "hebo"
+        elif datos["cursiva"]:
+            fuente = "heit"
+        else:
+            fuente = "helv"
+
+        color_normalizado = tuple(c / 255 for c in datos["color"])
+        color_de_fondo = self.muestrear_color_de_fondo(pagina, bbox_detectado)
+
+        try:
+            if es_una_sola_linea:
+                # Borramos el texto viejo (tapandolo con el color de fondo real).
+                pagina.add_redact_annot(bbox_detectado, fill=color_de_fondo)
+                pagina.apply_redactions()
+                pagina.clean_contents()  # evita referencias colgando tras editar
+
+                if datos["usar_clic"]:
+                    self.accion_pendiente_por_clic = lambda num_pag, punto: self.escribir_texto_en_punto(
+                        num_pag, punto, datos["texto"], datos["tamano"], fuente, color_normalizado,
+                    )
+                    self.statusBar().showMessage("Ahora da clic en la pagina donde quieras el texto...")
+                    return
+
+                pagina.insert_text(
+                    (datos["x"], datos["y"]), datos["texto"], fontsize=datos["tamano"],
+                    fontname=fuente, color=color_normalizado,
+                )
+            else:
+                if datos["usar_clic"]:
+                    ancho_elegido, alto_elegido = datos["ancho"], datos["alto"]
+                    prueba_rect = fitz.Rect(0, 0, ancho_elegido, alto_elegido)
+                    if not self.texto_cabe_en_cuadro(datos["texto"], prueba_rect, datos["tamano"], fuente):
+                        QMessageBox.warning(
+                            self, "El texto no cabe en el cuadro",
+                            "El texto no cabe con el ancho/alto que dejaste. Agranda "
+                            "el cuadro o reduce el tamano de letra, y vuelve a intentar."
+                        )
+                        return
+                    pagina.add_redact_annot(bbox_real, fill=color_de_fondo)
+                    pagina.apply_redactions()
+                    pagina.clean_contents()
+                    self.accion_pendiente_por_clic = lambda num_pag, punto: self.escribir_cuadro_de_texto_en_punto(
+                        num_pag, punto, datos["texto"], datos["tamano"], fuente,
+                        color_normalizado, ancho_elegido, alto_elegido,
+                    )
+                    self.statusBar().showMessage("Ahora da clic en la pagina donde quieras el texto...")
+                    return
+
+                nuevo_rect = fitz.Rect(
+                    datos["x"], datos["y"],
+                    datos["x"] + datos["ancho"], datos["y"] + datos["alto"],
+                )
+                # PRIMERO probamos si el texto cabe, en un documento de PRUEBA
+                # aparte (que se descarta), SIN tocar para nada el PDF real.
+                if not self.texto_cabe_en_cuadro(datos["texto"], nuevo_rect, datos["tamano"], fuente):
+                    QMessageBox.warning(
+                        self, "El texto no cabe en el cuadro",
+                        "El texto que escribiste no cabe con ese tamano de letra en "
+                        "el cuadro que elegiste. Agranda el ancho/alto del cuadro o "
+                        "reduce el tamano de letra, y vuelve a intentar.\n\n"
+                        "No se modifico el documento (tu texto original sigue intacto)."
+                    )
+                    return
+
+                pagina.add_redact_annot(bbox_real, fill=color_de_fondo)
+                pagina.apply_redactions()
+                pagina.clean_contents()  # evita referencias colgando tras editar
+                pagina.insert_textbox(
+                    nuevo_rect, datos["texto"], fontsize=datos["tamano"],
+                    fontname=fuente, color=color_normalizado, align=0,
+                )
         except Exception as error:
             QMessageBox.critical(self, "Error al editar el texto", str(error))
+
+    def escribir_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color):
+        """Escribe una linea de texto en el punto donde el usuario dio clic."""
+        pagina = self.documento[numero_pagina]
+        try:
+            pagina.insert_text((punto.x, punto.y), texto, fontsize=tamano, fontname=fuente, color=color)
+            self.redibujar_pagina_individual(numero_pagina)
+        except Exception as error:
+            QMessageBox.critical(self, "Error al colocar el texto", str(error))
+
+    def escribir_cuadro_de_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color, ancho, alto):
+        """Escribe un cuadro de texto (varias lineas) en el punto donde el usuario dio clic."""
+        pagina = self.documento[numero_pagina]
+        try:
+            rect = fitz.Rect(punto.x, punto.y, punto.x + ancho, punto.y + alto)
+            pagina.insert_textbox(rect, texto, fontsize=tamano, fontname=fuente, color=color, align=0)
+            self.redibujar_pagina_individual(numero_pagina)
+        except Exception as error:
+            QMessageBox.critical(self, "Error al colocar el texto", str(error))
+
+    def editar_imagen(self, pagina, imagen):
+        """Muestra opciones para reemplazar o eliminar una imagen detectada."""
+        opciones = QMessageBox(self)
+        opciones.setWindowTitle("Editar imagen")
+        opciones.setText("¿Que quieres hacer con esta imagen?")
+        opciones.addButton("Reemplazar imagen...", QMessageBox.ActionRole)
+        opciones.addButton("Eliminar imagen", QMessageBox.DestructiveRole)
+        opciones.addButton("Cancelar", QMessageBox.RejectRole)
+        opciones.exec()
+
+        # IMPORTANTE: comparamos por TEXTO del boton, no por identidad del
+        # objeto ("es este boton") - en PySide6, comparar identidad de un
+        # boton contra lo que devuelve clickedButton() puede fallar de forma
+        # silenciosa y hacer que no se ejecute nada al hacer clic.
+        boton_presionado = opciones.clickedButton()
+        texto_boton = boton_presionado.text() if boton_presionado else ""
+
+        try:
+            if texto_boton == "Reemplazar imagen...":
+                ruta_nueva, _ = QFileDialog.getOpenFileName(
+                    self, "Selecciona la imagen nueva", "",
+                    "Imagenes (*.png *.jpg *.jpeg)"
+                )
+                if not ruta_nueva:
+                    return
+
+                bbox = imagen["bbox"]
+                dialogo_posicion = DialogoPosicionarImagen(
+                    bbox.x0, bbox.y0, bbox.width, bbox.height, parent=self
+                )
+                if dialogo_posicion.exec() != QDialog.Accepted:
+                    return
+                datos = dialogo_posicion.obtener_valores()
+
+                # Borramos la imagen vieja de una vez (haya elegido clic o numeros)
+                pagina.delete_image(imagen["xref"])
+                pagina.clean_contents()  # limpia referencias que ya no se usan
+
+                if datos["usar_clic"]:
+                    self.accion_pendiente_por_clic = lambda num_pag, punto: self.colocar_imagen_en_punto(
+                        num_pag, punto, ruta_nueva, datos["ancho"], datos["alto"], datos["mantener_proporcion"]
+                    )
+                    self.statusBar().showMessage(
+                        "Ahora da clic en la pagina donde quieras la esquina "
+                        "superior izquierda de la imagen nueva..."
+                    )
+                    return
+
+                nuevo_rect = fitz.Rect(
+                    datos["x"], datos["y"],
+                    datos["x"] + datos["ancho"], datos["y"] + datos["alto"],
+                )
+                pagina.insert_image(
+                    nuevo_rect, filename=ruta_nueva,
+                    keep_proportion=datos["mantener_proporcion"],
+                )
+            elif texto_boton == "Eliminar imagen":
+                respuesta = QMessageBox.question(self, "Confirmar", "¿Eliminar esta imagen del documento?")
+                if respuesta != QMessageBox.Yes:
+                    return
+                pagina.delete_image(imagen["xref"])
+                pagina.clean_contents()  # limpia referencias que ya no se usan
+            else:
+                return  # Cancelar
+        except Exception as error:
+            QMessageBox.critical(self, "Error al editar la imagen", str(error))
+
+    def colocar_imagen_en_punto(self, numero_pagina, punto, ruta, ancho, alto, mantener_proporcion):
+        """Coloca una imagen ya elegida en el punto donde el usuario dio clic (esquina superior izquierda)."""
+        pagina = self.documento[numero_pagina]
+        nuevo_rect = fitz.Rect(punto.x, punto.y, punto.x + ancho, punto.y + alto)
+        try:
+            pagina.insert_image(nuevo_rect, filename=ruta, keep_proportion=mantener_proporcion)
+            self.redibujar_pagina_individual(numero_pagina)
+            if self.combo_herramienta.currentText() == "Editar contenido (texto e imagenes)":
+                parrafos = self.obtener_todos_los_parrafos(pagina)
+                imagenes = self.obtener_todas_las_imagenes(pagina)
+                formas = self.obtener_formas_de_color(pagina)
+                etiqueta = self.etiquetas_paginas[numero_pagina]
+                if etiqueta is not None and etiqueta.pixmap_limpio is not None:
+                    etiqueta.setPixmap(self.dibujar_cajas_de_texto(etiqueta.pixmap_limpio, parrafos, imagenes, formas))
+        except Exception as error:
+            QMessageBox.critical(self, "Error al colocar la imagen", str(error))
 
     def rotar_pagina(self):
         if self.documento is None:
