@@ -44,18 +44,13 @@ Cada fase es una entrega funcional. No pasamos a la siguiente hasta que la actua
 - Redacción permanente (tachar y eliminar datos de verdad, no solo visualmente)
 - Firma digital con certificado o imagen de firma
 
-## Fase 8 — Optimización y pulido
-- Comprimir PDFs pesados
-- Instalador para Windows (.exe) y paquete para Linux
-- Ícono y nombre propio del programa
-- Empaquetado final con PyInstaller
-- ⚠️ **Importante:** al generar el `.exe`, Windows Defender/SmartScreen puede
-  marcarlo como "app desconocida y potencialmente peligrosa" (esto ya le pasó
-  antes al autor con otro proyecto). Hay que documentar bien cómo empaquetar
-  con PyInstaller de forma más "confiable" (evitar el modo `--onefile` cuando
-  sea posible, usar `--noconsole` correctamente, y explicar el proceso de
-  desbloqueo manual en Windows Defender como plan B) para que no sea una
-  sorpresa la primera vez que se ejecute en una PC con Windows.
+## Fase 8 — Optimización y pulido ✅ (empaquetado hecho, probado en Linux)
+- [x] Empaquetado con PyInstaller (`--windowed --onedir`), probado y funcionando en Linux sin necesitar Python/venv
+- [x] Documentado en `EMPAQUETADO.md`: pasos para Linux Y Windows, ícono/lanzador de escritorio
+- [x] Documentado el manejo de Windows Defender/SmartScreen (por qué pasa, cómo desbloquear, por qué usamos `--onedir` en vez de `--onefile`)
+- [ ] Pendiente: generar y probar el `.exe` en una PC con Windows de verdad (esto no se puede hacer desde Linux)
+- [ ] Pendiente: comprimir PDFs pesados como función aparte (ya existe "Comprimir PDF" en el menú Herramientas)
+- [ ] Pendiente: ícono propio del programa (por ahora usa el ícono genérico de PDF)
 
 ## Fase 9 — Documentación final para portafolio
 - Manual de usuario
