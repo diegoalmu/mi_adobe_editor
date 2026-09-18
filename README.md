@@ -71,3 +71,7 @@ Todo el progreso, fecha por fecha, se documenta en [BITACORA.md](BITACORA.md)
 ## 🗺️ Plan de desarrollo por fases
 
 Ver [ROADMAP.md](ROADMAP.md)
+
+## 📄 Licencia
+
+MIT — ver [LICENSE](LICENSE).
