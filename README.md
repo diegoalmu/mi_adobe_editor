@@ -26,6 +26,16 @@ un programa de escritorio (Windows y Linux) capaz de:
 - [x] Comprimir y optimizar el tamaño del archivo
 - [x] Proteger con contraseña / quitar contraseña
 
+### 📍 Estado actual (octubre 2026)
+
+Fases 1 a 4 del [ROADMAP](ROADMAP.md) completadas y funcionando (visor, anotaciones,
+gestión de páginas y edición de contenido real). El programa ya está **empaquetado
+y probado como aplicación de escritorio en Linux** (ver [EMPAQUETADO.md](EMPAQUETADO.md)).
+
+Pendientes: formularios (Fase 5), notas "sticky note", redacción permanente,
+firma con certificado, exportar a Excel, generar el `.exe` de Windows, ícono
+propio y la documentación final de portafolio (Fase 9).
+
 ## 🛠️ Tecnología usada
 
 | Necesidad | Herramienta | Por qué |
@@ -33,35 +43,40 @@ un programa de escritorio (Windows y Linux) capaz de:
 | Lenguaje | Python 3.11+ | Fácil de aprender, enorme ecosistema para PDFs |
 | Interfaz gráfica | PySide6 (Qt) | Gratis, profesional, funciona igual en Windows y Linux |
 | Motor de PDF | PyMuPDF (fitz) | El motor más completo y rápido, gratis, usado en editores comerciales |
-| OCR | Tesseract + pytesseract | Motor de OCR gratuito de Google |
+| OCR | ocrmypdf + Tesseract | Motor de OCR gratuito; le agrega capa de texto invisible a PDFs escaneados |
 | Conversión a Word | pdf2docx | Convierte PDF a .docx conservando formato |
 
 ## 📂 Estructura del proyecto
 
 ```
-mi-adobe-pdf/
-├── app/                      # Código fuente del programa (main.py, etc.)
-├── assets/                   # Íconos, imágenes del programa
-├── tests/                    # Pruebas del programa
+mi_adobe_editor/
+├── app/                      # Código fuente del programa (hoy todo en main.py)
 ├── README.md                 # Esta página
 ├── ROADMAP.md                # Plan de desarrollo por fases
-├── BITACORA.md                # Registro sesión por sesión de todo lo que hacemos
+├── BITACORA.md               # Registro sesión por sesión de todo lo que hacemos
 ├── INSTALACION_WINDOWS.md    # Instalación paso a paso en Windows
 ├── INSTALACION_LINUX.md      # Instalación paso a paso en Linux
 ├── GITHUB_DESKTOP.md         # Cómo publicar el proyecto con GitHub Desktop
+├── EMPAQUETADO.md            # Cómo generar el ejecutable independiente (sin Python)
+├── LICENSE                   # Licencia MIT
 └── requirements.txt          # Librerías necesarias
 ```
 
-> Nota: toda la documentación vive en archivos `.md` sueltos en la raíz del
+> Nota 1: toda la documentación vive en archivos `.md` sueltos en la raíz del
 > proyecto (no en subcarpetas), para poder navegarlos y editarlos fácilmente
 > desde Obsidian o directo en GitHub.
+>
+> Nota 2: todavía **no existen** las carpetas `assets/` (íconos) ni `tests/`
+> (pruebas). Son parte del plan (ícono propio en la Fase 8, pruebas y pulido
+> en la Fase 9 del [ROADMAP](ROADMAP.md)).
 
 ## 🚀 Instalación rápida
 
 Ver instrucciones completas paso a paso en:
 - [INSTALACION_WINDOWS.md](INSTALACION_WINDOWS.md)
 - [INSTALACION_LINUX.md](INSTALACION_LINUX.md)
-- [GITHUB_DESKTOP.md](GITHUB_DESKTOP.md) — cómo publicar el proyecto en GitHub usando GitHub Desktop en Linux
+- [GITHUB_DESKTOP.md](GITHUB_DESKTOP.md) — cómo publicar el proyecto en GitHub usando GitHub Desktop
+- [EMPAQUETADO.md](EMPAQUETADO.md) — cómo generar el ejecutable independiente (Linux y Windows) con PyInstaller
 
 ## 📅 Bitácora de avance
 
@@ -71,3 +86,11 @@ Todo el progreso, fecha por fecha, se documenta en [BITACORA.md](BITACORA.md)
 ## 🗺️ Plan de desarrollo por fases
 
 Ver [ROADMAP.md](ROADMAP.md)
+
+## 📄Licencia
+
+Copyright (C) 2026 Diego Alvarez
+
+Este programa se distribuye bajo la licencia **GNU Affero General Public License v3.0** (AGPL-3.0). Ver el archivo [LICENSE](LICENSE).
+
+Se eligió AGPL-3.0 porque el proyecto usa [PyMuPDF](https://pymupdf.readthedocs.io/), que también se distribuye bajo AGPL-3.0.

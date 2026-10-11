@@ -206,6 +206,79 @@ importantes de la Fase 4 corregidos y probados contra documentos reales.
 
 ---
 
+## Sesión 6 — 2026-10-10
+
+**Objetivo de la sesión:** Revisar el estado completo del proyecto en una máquina Windows
+nueva (esta sesión se hizo desde Windows, no desde el Linux Mint de siempre), limpiar
+código y sincronizar la documentación (`README.md`, `ROADMAP.md` y esta bitácora) para
+que digan exactamente lo que el programa puede hacer hoy.
+
+**Contexto:** El último trabajo de código real fue la Sesión 5 (2026-09-05). Después solo
+se agregaron la licencia MIT y su sección en el README (2026-09-18). La rama
+`estandarizar` tenía 2 commits sin publicar. Al releer todo el proyecto se encontraron
+cosas que habían quedado sin registrar ni corregir.
+
+**Actividades realizadas:**
+1. Lectura completa de la estructura y de todos los archivos del proyecto
+   (`README.md`, `ROADMAP.md`, `BITACORA.md`, `EMPAQUETADO.md`, las guías de
+   instalación, `requirements.txt` y `app/main.py`, que tiene 1803 líneas).
+2. **Corrección de bug**: la función `convertir_a_word()` estaba **definida dos veces**
+   seguidas en `app/main.py`. En Python, si defines una función con el mismo nombre dos
+   veces, la segunda "pisa" a la primera y el código anterior queda muerto (nunca se
+   ejecuta, aunque parezca que sí al leerlo). Se eliminó la segunda copia y se conservó
+   la primera, que tenía el manejo de errores más completo y el aviso sobre las
+   limitaciones del formato Word.
+3. **Limpieza de `requirements.txt`**: `pdf2docx` aparecía dos veces, con dos comentarios
+   distintos para la misma librería. Se dejó una sola entrada.
+4. **Título de ventana**: decía "Mi Adobe PDF - Fase 2" (etiqueta vieja de cuando el
+   programa era solo el visor). Se cambió a "Mi Adobe PDF" en los dos lugares donde
+   aparecía.
+5. **Docstring de `app/main.py`**: el texto de cabecera describía el programa como
+   "Fase 2 (v2)" y solo mencionaba el scroll continuo. Se reescribió para que liste el
+   estado real: anotaciones, edición de contenido, gestión de páginas, Word, OCR,
+   compresión y contraseñas.
+6. **`ROADMAP.md` sincronizado con la realidad**: la Fase 4 (edición de texto real) ya
+   estaba construida y probada desde las Sesiones 4 y 5, pero **nunca se había marcado
+   como completada**. Se marcó ✅, se detalló lo que sí hace (detectar bloques de texto,
+   editar contenido, tamaño/color/negrita/cursiva, y de bonus también imágenes y formas
+   de color) y se dejó escrita la limitación técnica real de los PDFs. También se
+   marcaron los avances parciales de las Fases 6 (OCR, Word, imágenes) y 7 (contraseña,
+   firma por imagen), y se actualizó la Fase 2 (la firma por imagen ya existe).
+7. **`README.md` corregido**: la "Estructura del proyecto" anunciaba carpetas `assets/`
+   y `tests/` que no existen (prometer cosas que no están confunde a quien llegue al
+   repositorio). Se dejó la estructura real, se agregaron `LICENSE` y `EMPAQUETADO.md`
+   (que existía pero no estaba enlazado desde ningún lado del README), y se agregó una
+   sección breve de "Estado actual" junto al checklist de objetivos.
+8. Verificación con Python (`ast.parse`) de que `app/main.py` sigue siendo un archivo
+   válido tras los cambios: quedó en 1771 líneas, sin errores de sintaxis.
+
+**Problemas encontrados y explicación:**
+- **Función duplicada (`convertir_a_word`)**: no rompía el arranque del programa (Python
+  no se queja de eso), pero la copia muerta engañaba al leer el código: parecía que
+  había dos formas de convertir a Word cuando en realidad solo se ejecutaba una. Es el
+  tipo de cosa que se ve leyendo el código completo, no usando el programa.
+- **Documentación desincronizada**: el README decía que la edición de texto y el OCR
+  estaban hechos, y el ROADMAP no los marcaba como completados. Dos archivos diciendo
+  cosas distintas sobre el mismo programa.
+
+**Resultado:** Código limpio (sin funciones duplicadas) y los tres archivos de control
+(README, ROADMAP y BITACORA) diciendo lo mismo y coincidiendo con lo que el programa
+realmente hace. Base ordenada para arrancar la Fase 5.
+
+**Pendiente para futuras sesiones:**
+- Fase 5: formularios PDF (rellenar los existentes y crear campos nuevos)
+- Notas tipo "sticky note", redacción permanente, firma con certificado, exportar a Excel
+- Generar y probar el `.exe` en Windows: esta sesión fue en Windows, pero **todavía no
+  existe el entorno virtual (`venv/`) en esta máquina**, así que no se instaló nada ni
+  se ejecutó el programa
+- Ícono propio del programa y creación de la carpeta `assets/`
+- Fase 9: manual de usuario, capturas de pantalla, video demo
+- **Git:** los cambios de esta sesión están en la rama local `estandarizar`, que además
+  tenía 2 commits sin publicar desde el 2026-09-18. Falta decidir con el usuario cuándo
+  hacer commit y cuándo subirlos a GitHub.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
