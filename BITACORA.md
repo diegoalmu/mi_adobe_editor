@@ -624,6 +624,121 @@ los usa porque falta la Tarea 5, que los conecta en `main.py`.
 
 ---
 
+## Sesión 13 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 5 del plan `DISENO_EDITOR_TEXTO.md`:
+conectar el editor en línea y la barra de formato en `app/main.py`, con la
+conversión de tamaños puntos PDF ↔ puntos Qt según el zoom del visor.
+
+**Actividades realizadas:**
+1. **`app/editor_texto.py` modificado** (de 314 a 365 líneas):
+   - Líneas 10–15: docstring del módulo actualizado para mencionar
+     `tamano_pdf_a_editor` / `tamano_editor_a_pdf`.
+   - Líneas 80–98: nuevas funciones `tamano_pdf_a_editor` (punto PDF →
+     punto Qt: `punto_pdf * zoom * 72 / dpi_logica`) y `tamano_editor_a_pdf`
+     (inversa exacta). Fórmula verificada empíricamente: a 96 DPI y zoom 1,
+     12 puntos PDF = 9 puntos Qt.
+   - Líneas 111–124: `BarraFormato.__init__` ahora recibe `zoom=1.0` y
+     `dpi_logica=96.0` y los guarda; docstring explica que el combo de
+     tamaños muestra puntos PDF.
+   - Líneas 190–200: `aplicar_tamano` convierte el punto PDF elegido a
+     puntos Qt antes de aplicarlo.
+   - Líneas 268–274: `actualizar_desde_cursor` convierte el punto Qt del
+     cursor a puntos PDF para resaltar el tamaño en el combo.
+   - Líneas 299–365: `documento_a_fragmentos` acepta `zoom=None` y
+     `dpi_logica=None`; si se pasan, convierte cada tamaño Qt → PDF
+     (para el HTML del PDF). Sin parámetros se comporta como antes (las
+     pruebas viejas no cambian).
+2. **`app/main.py` modificado** (de 1776 a 1855 líneas):
+   - Líneas 39–51: imports nuevos (`QFont`, `QTextCharFormat`,
+     `QTextCursor` en QtGui; de `editor_texto` las 4 funciones; de
+     `formato_html` las 6 utilidades del HTML con formato).
+   - Líneas 440–445: atributos `editor_texto_inline`, `barra_formato` y
+     `parrafo_editando` (todos en `None` al arrancar).
+   - Línea 628: `dibujar_todas_las_paginas` cancela la edición activa
+     antes de destruir las etiquetas (cubre también abrir PDF, rotar,
+     eliminar/insertar página, guardar).
+   - Líneas 715 y 722: `zoom_mas` / `zoom_menos` cancelan la edición
+     antes de redibujar con el nuevo zoom.
+   - Líneas 737–738: `al_seleccionar_rectangulo` no hace nada si hay
+     una edición en línea abierta (los clics quedan bloqueados).
+   - Líneas 788 y 795: la llamada a `editar_contenido_en_punto` ahora
+     pasa `numero_pagina`; el refresco de recuadros se delegó a
+     `refrescar_recuadros_pagina`.
+   - Líneas 819–838: nuevo método `refrescar_recuadros_pagina`
+     (extraído del bloque viejo de `al_seleccionar_rectangulo`; también
+     verifica que la herramienta siga siendo "Editar contenido").
+   - Líneas 1136–1154: `editar_contenido_en_punto` ahora recibe
+     `numero_pagina` y pasa el párrafo encontrado a
+     `editar_parrafo_encontrado(numero_pagina, pagina, parrafo)`.
+   - Líneas 1218–1289: `editar_parrafo_encontrado` reescrito por
+     completo: cancela edición previa, crea un `EditorTextoInline` hijo
+     de la `EtiquetaPDF` con `setGeometry(bbox * zoom)`, le pone el
+     texto y el formato inicial (primera tipografía disponible,
+     tamaño PDF→Qt, color del párrafo, negrita/cursiva según la fuente
+     original), conecta `aceptado`/`cancelado`, y agrega una
+     **`BarraFormato` nueva** debajo de la barra principal con
+     `addToolBarBreak` + `addToolBar`. Guarda los tres atributos.
+   - Líneas 1291–1296: nuevo método `_dpi_logica` (DPI lógico de la
+     pantalla; 96 si no hay pantalla, por ejemplo en pruebas).
+   - Líneas 1298–1352: nuevo método `aceptar_edicion_texto`: convierte
+     el documento Qt a fragmentos **con** zoom/DPI (tamaños ya en
+     puntos PDF), arma el HTML, prueba primero con
+     `cabe_texto_con_formato` en el documento real (si no cabe, avisa
+     y el editor sigue abierto), tapa el párrafo con
+     `muestrear_color_de_fondo` + redact, escribe con
+     `insertar_texto_con_formato`, y cierra + redibuja la página.
+   - Líneas 1354–1367: `cancelar_edicion_texto` y `cerrar_edicion_texto`
+     (quita la barra con `removeToolBar`, destruye editor y barra, y
+     deja los tres atributos en `None`).
+   - Líneas 1541, 1560 y 1596: `guardar_como`, `guardar` y
+     `cerrar_documento` cancelan la edición activa (en `cerrar_documento`
+     solo después de confirmar con Yes).
+3. **`tests/test_editor_texto.py` modificado** (de 142 a 157 líneas):
+   - `test_tamano_pdf_y_editor_ida_y_vuelta` (líneas 146–157): verifica
+     la ida y vuelta exacta en 4 tamaños × 4 zooms y el caso 12 pt PDF
+     = 9 pt Qt a 96 DPI y zoom 1.
+4. **`tests/test_edicion_inline.py` creado** (140 líneas, 2 pruebas):
+   - `test_editar_parrafo_en_linea_y_aceptar` (líneas 62–106): crea un
+     PDF real en `tmp_path` con "uno dos tres" a 12 pt, abre
+     `EditorPDF`, detecta el párrafo (bbox ensanchado +-10/+-5 para que
+     la prueba de "si cabe" no dispare un QMessageBox que bloquearía la
+     ejecución offscreen), edita en línea, pone "dos" en negrita con el
+     botón de la barra, acepta, y verifica que la edición se cerró, que
+     el span de "dos" tiene la marca de negrita (`flags & 16`), que el
+     texto sigue legible (normalizando los espacios duros `\xa0` que
+     genera `insert_htmlbox`), y que tras `guardar()` el archivo en
+     disco conserva todo.
+   - `test_editar_parrafo_y_cancelar_no_toca_el_pdf` (líneas 109–124):
+     cambia el texto en el editor pero cancela; verifica que el PDF no
+     cambió y que los atributos quedaron en `None`.
+5. **Pyright**: 38 errores, los mismos de ruido conocido de `app/main.py`
+   (enums Qt, `Document` iterable, `PDF_ENCRYPT_AES_256`,
+   `pixmap_limpio`); cero errores en `app/editor_texto.py` ni en los
+   tests.
+6. **Pytest**: 16 pruebas (2 de la Tarea 5 + 8 de la Tarea 4/3 + 1 nueva
+   de conversión + 4 de la Tarea 1 + 2 de la Tarea 2), todas en verde.
+
+**Resultado:** La herramienta "Editar contenido (texto e imagenes)" ya
+abre el párrafo en línea con una barra de formato completa debajo de la
+principal. El texto solo se escribe en el PDF al dar Aceptar (o
+Ctrl+Enter); Esc, Cancelar, guardar, cerrar y cambiar el zoom descartan
+lo no aceptado. Los tamaños del combo son puntos PDF y el editor los
+muestra a la escala del zoom, con ida y vuelta exacta.
+
+**Pendiente:**
+- Validación visual de Diego (ver checklist del resumen): tamaño del
+  editor vs página a distintos zooms y DPI de Windows, barra debajo de
+  la principal, Esc/Ctrl+Enter, clics bloqueados durante la edición,
+  guardar/cerrar/zoom descartando la edición.
+- Tarea 6: limpiar `DialogoEditarCuadroDeTexto` y los métodos
+  `escribir_texto_en_punto` / `escribir_cuadro_de_texto_en_punto` que
+  quedaron sin llamadores.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no
+  se borró nada sin permiso.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

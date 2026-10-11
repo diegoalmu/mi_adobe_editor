@@ -5,9 +5,12 @@ editor_texto.py - Cuadro editable y barra de formato del editor inline
 Clase EditorTextoInline (un QTextEdit sin marco que se pone encima de un
 parrafo del PDF, con fondo blanco semitransparente), clase BarraFormato
 (el QToolBar con selector de tipografia y tamano, botones de Negrita,
-Cursiva y Subrayado, boton de color, Aceptar y Cancelar), y la funcion
+Cursiva y Subrayado, boton de color, Aceptar y Cancelar), la funcion
 documento_a_fragmentos, que convierte el contenido del QTextEdit en la
-lista de fragmentos que consume formato_html.fragmentos_a_html.
+lista de fragmentos que consume formato_html.fragmentos_a_html, y las
+funciones tamano_pdf_a_editor / tamano_editor_a_pdf, que convierten los
+tamanos de puntos PDF (los del documento) a puntos de letra de Qt (los
+del editor) segun el zoom del visor y el DPI logico de la pantalla.
 
 El codigo usa nombres COMPLETOS de los enums de Qt (por ejemplo
 Qt.Key.Key_Escape o QFont.Weight.Bold) para que pyright no reporte
@@ -63,8 +66,36 @@ class EditorTextoInline(QTextEdit):
 # =========================================================================
 
 # Tamanos de letra (en puntos) que ofrece la barra, como en un
-# procesador de textos clasico.
+# procesador de textos clasico. Son PUNTOS PDF (el PDF usa 72 puntos
+# por pulgada); la barra los muestra tal cual y el PDF los recibe tal
+# cual. Para mostrarlos en el editor Qt se convierten con las dos
+# funciones de abajo.
 TAMANOS = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72]
+
+
+# =========================================================================
+# TAMANOS: PUNTOS PDF <-> PUNTOS DEL EDITOR (QT)
+# =========================================================================
+
+def tamano_pdf_a_editor(tamano_pdf, zoom, dpi_logica):
+    """Convierte un tamano en puntos PDF al tamano en puntos de Qt.
+
+    El visor dibuja la pagina con la matriz (zoom, zoom) y PyMuPDF usa
+    72 puntos por pulgada al renderizar, asi que 1 punto PDF ocupa
+    `zoom` pixeles en el visor. Qt, en cambio, usa el DPI logico de la
+    pantalla (`dpi_logica`, 96 en Windows al 100%): 1 punto de letra Qt
+    ocupa `dpi_logica / 72` pixeles. Igualando los dos tamaños para que
+    el texto del editor se vea igual que en la página:
+
+        punto_editor = punto_pdf * zoom * 72 / dpi_logica
+    """
+    return tamano_pdf * zoom * 72.0 / dpi_logica
+
+
+def tamano_editor_a_pdf(tamano_editor, zoom, dpi_logica):
+    """Convierte un tamano en puntos de Qt a puntos PDF (ida y vuelta
+    exacto con tamano_pdf_a_editor)."""
+    return tamano_editor * dpi_logica / (zoom * 72.0)
 
 
 class BarraFormato(QToolBar):
@@ -76,15 +107,21 @@ class BarraFormato(QToolBar):
     control aplica el formato solo a la seleccion del editor (o a lo que
     se escriba despues, si no hay seleccion, como en Word). Al mover el
     cursor del editor, la barra refleja el formato del texto donde esta.
-    Senales: `aceptar` y `cancelar`.
+
+    Los tamanos del selector son PUNTOS PDF (como los que recibe el
+    PDF); `zoom` y `dpi_logica` son los del visor, y se usan para
+    convertirlos al tamano de letra que el editor Qt necesita (ver
+    tamano_pdf_a_editor). Senales: `aceptar` y `cancelar`.
     """
 
     aceptar = Signal()
     cancelar = Signal()
 
-    def __init__(self, editor, parent=None):
+    def __init__(self, editor, zoom=1.0, dpi_logica=96.0, parent=None):
         super().__init__(parent)
         self.editor = editor
+        self.zoom = zoom
+        self.dpi_logica = dpi_logica
         self._color_actual = QColor(0, 0, 0)
 
         # Selector de tipografia: solo las disponibles en el sistema
@@ -151,11 +188,14 @@ class BarraFormato(QToolBar):
         self.editor.mergeCurrentCharFormat(formato)
 
     def aplicar_tamano(self, texto):
-        """Aplica el tamano elegido (en puntos) a la seleccion del editor."""
+        """Aplica al editor el tamano elegido en la barra (puntos PDF)."""
         if not texto:
             return
+        tamano_editor = tamano_pdf_a_editor(
+            float(texto), self.zoom, self.dpi_logica
+        )
         formato = QTextCharFormat()
-        formato.setFontPointSize(float(texto))
+        formato.setFontPointSize(tamano_editor)
         self.editor.mergeCurrentCharFormat(formato)
 
     def alternar_negrita(self, activo):
@@ -225,9 +265,13 @@ class BarraFormato(QToolBar):
                 if indice >= 0:
                     self.combo_tipografia.setCurrentIndex(indice)
 
-            tamano = formato.fontPointSize()
-            if tamano:
-                self.combo_tamano.setCurrentIndex(self._indice_de_tamano(tamano))
+            tamano_editor = formato.fontPointSize()
+            if tamano_editor:
+                # El combo muestra puntos PDF; el editor guarda puntos Qt
+                tamano_pdf = tamano_editor_a_pdf(
+                    tamano_editor, self.zoom, self.dpi_logica
+                )
+                self.combo_tamano.setCurrentIndex(self._indice_de_tamano(tamano_pdf))
 
             self.boton_negrita.setChecked(
                 formato.fontWeight() >= int(QFont.Weight.Bold)
@@ -252,7 +296,7 @@ class BarraFormato(QToolBar):
 # DOCUMENTO DE QT -> LISTA DE FRAGMENTOS
 # =========================================================================
 
-def documento_a_fragmentos(documento_qt):
+def documento_a_fragmentos(documento_qt, zoom=None, dpi_logica=None):
     """Convierte el documento de un QTextEdit en la lista de fragmentos.
 
     Cada fragmento es un diccionario con las claves texto, familia,
@@ -261,6 +305,11 @@ def documento_a_fragmentos(documento_qt):
     bloques (parrafos) se agrega un "\\n" al final del ultimo fragmento
     del bloque, para que despues se convierta en <br>. Si un bloque esta
     vacio, se agrega un fragmento que solo contiene el "\\n".
+
+    El editor guarda los tamanos en puntos de Qt, pero el HTML del PDF
+    necesita puntos PDF: si se pasan `zoom` y `dpi_logica` (los del
+    visor), cada tamano se convierte con tamano_editor_a_pdf. Si no se
+    pasan, se copia tal cual (util en pruebas).
     """
     fragmentos = []
     fuente_defecto = documento_qt.defaultFont()
@@ -277,6 +326,8 @@ def documento_a_fragmentos(documento_qt):
                 familias = formato.fontFamilies()
                 familia = familias[0] if familias else fuente_defecto.family()
                 tamano = formato.fontPointSize() or fuente_defecto.pointSizeF()
+                if zoom is not None and dpi_logica is not None:
+                    tamano = tamano_editor_a_pdf(tamano, zoom, dpi_logica)
                 color_qt = formato.foreground().color()
                 if color_qt.isValid():
                     tupla_color = (color_qt.red(), color_qt.green(), color_qt.blue())

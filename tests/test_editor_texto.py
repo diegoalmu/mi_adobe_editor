@@ -1,4 +1,4 @@
-"""Pruebas de app/editor_texto.py (Tareas 3 y 4 del diseno).
+"""Pruebas de app/editor_texto.py (Tareas 3, 4 y 5 del diseno).
 
 La plataforma offscreen de Qt la fija tests/conftest.py antes de
 importar los modulos de la aplicacion.
@@ -10,7 +10,10 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QColor, QKeyEvent, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QApplication
 
-from editor_texto import BarraFormato, EditorTextoInline, documento_a_fragmentos
+from editor_texto import (
+    BarraFormato, EditorTextoInline, documento_a_fragmentos,
+    tamano_editor_a_pdf, tamano_pdf_a_editor,
+)
 from formato_html import CARPETA_FUENTES_WINDOWS, tipografias_disponibles
 
 # QApplication unica para todas las pruebas (crear varias da error)
@@ -140,3 +143,15 @@ def test_barra_tipografias_solo_las_disponibles():
     assert barra.combo_tipografia.count() == len(esperadas)
     for indice, nombre in enumerate(esperadas):
         assert barra.combo_tipografia.itemText(indice) == nombre
+
+
+def test_tamano_pdf_y_editor_ida_y_vuelta():
+    for tamano_pdf in (8, 12, 24, 72):
+        for zoom in (0.5, 1.0, 1.5, 2.0):
+            editor = tamano_pdf_a_editor(tamano_pdf, zoom, 96.0)
+            assert editor > 0
+            # La conversion inversa debe devolver el mismo punto PDF
+            assert abs(tamano_editor_a_pdf(editor, zoom, 96.0) - tamano_pdf) < 1e-9
+
+    # A 96 DPI y zoom 1, 12 puntos PDF son 9 puntos de Qt (factor 0.75)
+    assert abs(tamano_pdf_a_editor(12, 1.0, 96.0) - 9.0) < 1e-9
