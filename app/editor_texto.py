@@ -1,9 +1,11 @@
 """
-editor_texto.py - Cuadro editable del editor de texto inline
-============================================================
+editor_texto.py - Cuadro editable y barra de formato del editor inline
+======================================================================
 
 Clase EditorTextoInline (un QTextEdit sin marco que se pone encima de un
-parrafo del PDF, con fondo blanco semitransparente) y la funcion
+parrafo del PDF, con fondo blanco semitransparente), clase BarraFormato
+(el QToolBar con selector de tipografia y tamano, botones de Negrita,
+Cursiva y Subrayado, boton de color, Aceptar y Cancelar), y la funcion
 documento_a_fragmentos, que convierte el contenido del QTextEdit en la
 lista de fragmentos que consume formato_html.fragmentos_a_html.
 
@@ -13,8 +15,18 @@ errores por enums cortos.
 """
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QTextCharFormat
-from PySide6.QtWidgets import QFrame, QTextEdit
+from PySide6.QtGui import QColor, QFont, QTextCharFormat
+from PySide6.QtWidgets import (
+    QComboBox,
+    QColorDialog,
+    QFrame,
+    QPushButton,
+    QTextEdit,
+    QToolBar,
+    QToolButton,
+)
+
+from formato_html import CARPETA_FUENTES_WINDOWS, tipografias_disponibles
 
 
 class EditorTextoInline(QTextEdit):
@@ -44,6 +56,196 @@ class EditorTextoInline(QTextEdit):
             self.aceptado.emit()
             return
         super().keyPressEvent(evento)
+
+
+# =========================================================================
+# BARRA DE FORMATO
+# =========================================================================
+
+# Tamanos de letra (en puntos) que ofrece la barra, como en un
+# procesador de textos clasico.
+TAMANOS = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72]
+
+
+class BarraFormato(QToolBar):
+    """Barra con los controles de formato del editor de texto inline.
+
+    Contiene el selector de tipografia (solo las disponibles en el
+    sistema), el de tamano, los botones activables de Negrita, Cursiva y
+    Subrayado, el boton de color, y los botones Aceptar y Cancelar. Cada
+    control aplica el formato solo a la seleccion del editor (o a lo que
+    se escriba despues, si no hay seleccion, como en Word). Al mover el
+    cursor del editor, la barra refleja el formato del texto donde esta.
+    Senales: `aceptar` y `cancelar`.
+    """
+
+    aceptar = Signal()
+    cancelar = Signal()
+
+    def __init__(self, editor, parent=None):
+        super().__init__(parent)
+        self.editor = editor
+        self._color_actual = QColor(0, 0, 0)
+
+        # Selector de tipografia: solo las disponibles en el sistema
+        self.combo_tipografia = QComboBox()
+        self.combo_tipografia.addItems(
+            tipografias_disponibles(CARPETA_FUENTES_WINDOWS)
+        )
+        self.combo_tipografia.currentTextChanged.connect(self.aplicar_tipografia)
+        self.addWidget(self.combo_tipografia)
+
+        # Selector de tamano
+        self.combo_tamano = QComboBox()
+        for tamano in TAMANOS:
+            self.combo_tamano.addItem(str(tamano))
+        self.combo_tamano.setCurrentIndex(TAMANOS.index(11))
+        self.combo_tamano.currentTextChanged.connect(self.aplicar_tamano)
+        self.addWidget(self.combo_tamano)
+
+        # Botones activables: Negrita (N), Cursiva (C) y Subrayado (S)
+        self.boton_negrita = QToolButton()
+        self.boton_negrita.setText("N")
+        self.boton_negrita.setCheckable(True)
+        self.boton_negrita.toggled.connect(self.alternar_negrita)
+        self.addWidget(self.boton_negrita)
+
+        self.boton_cursiva = QToolButton()
+        self.boton_cursiva.setText("C")
+        self.boton_cursiva.setCheckable(True)
+        self.boton_cursiva.toggled.connect(self.alternar_cursiva)
+        self.addWidget(self.boton_cursiva)
+
+        self.boton_subrayado = QToolButton()
+        self.boton_subrayado.setText("S")
+        self.boton_subrayado.setCheckable(True)
+        self.boton_subrayado.toggled.connect(self.alternar_subrayado)
+        self.addWidget(self.boton_subrayado)
+
+        # Boton de color: elegir_color abre el dialogo de Windows y
+        # aplicar_color hace el trabajo (las pruebas usan solo
+        # aplicar_color, nunca abren el dialogo).
+        self.boton_color = QPushButton("Color")
+        self.boton_color.clicked.connect(self.elegir_color)
+        self.addWidget(self.boton_color)
+
+        # Aceptar y Cancelar
+        self.boton_aceptar = QPushButton("Aceptar")
+        self.boton_aceptar.clicked.connect(lambda: self.aceptar.emit())
+        self.addWidget(self.boton_aceptar)
+
+        self.boton_cancelar = QPushButton("Cancelar")
+        self.boton_cancelar.clicked.connect(lambda: self.cancelar.emit())
+        self.addWidget(self.boton_cancelar)
+
+        # Reflejar el formato del cursor y seguirlo cuando se mueva
+        self.editor.cursorPositionChanged.connect(self.actualizar_desde_cursor)
+        self.actualizar_desde_cursor()
+
+    def aplicar_tipografia(self, nombre):
+        """Aplica la tipografia elegida a la seleccion del editor."""
+        if not nombre:
+            return
+        formato = QTextCharFormat()
+        formato.setFontFamilies([nombre])
+        self.editor.mergeCurrentCharFormat(formato)
+
+    def aplicar_tamano(self, texto):
+        """Aplica el tamano elegido (en puntos) a la seleccion del editor."""
+        if not texto:
+            return
+        formato = QTextCharFormat()
+        formato.setFontPointSize(float(texto))
+        self.editor.mergeCurrentCharFormat(formato)
+
+    def alternar_negrita(self, activo):
+        """Pone o quita negrita en la seleccion del editor."""
+        formato = QTextCharFormat()
+        if activo:
+            formato.setFontWeight(QFont.Weight.Bold)
+        else:
+            formato.setFontWeight(QFont.Weight.Normal)
+        self.editor.mergeCurrentCharFormat(formato)
+
+    def alternar_cursiva(self, activo):
+        """Pone o quita cursiva en la seleccion del editor."""
+        formato = QTextCharFormat()
+        formato.setFontItalic(activo)
+        self.editor.mergeCurrentCharFormat(formato)
+
+    def alternar_subrayado(self, activo):
+        """Pone o quita subrayado en la seleccion del editor."""
+        formato = QTextCharFormat()
+        formato.setFontUnderline(activo)
+        self.editor.mergeCurrentCharFormat(formato)
+
+    def elegir_color(self):
+        """Abre el selector de color de Windows y aplica el elegido."""
+        color = QColorDialog.getColor(initial=self._color_actual, parent=self)
+        if color.isValid():
+            self.aplicar_color(color)
+
+    def aplicar_color(self, color):
+        """Aplica el color dado (un QColor) a la seleccion del editor."""
+        formato = QTextCharFormat()
+        formato.setForeground(color)
+        self.editor.mergeCurrentCharFormat(formato)
+        self._color_actual = color
+        self._pintar_boton_color(color)
+
+    def _pintar_boton_color(self, color):
+        """Pinta el boton de color con el color actual, como muestra."""
+        self.boton_color.setStyleSheet(
+            "background-color: rgb({}, {}, {});".format(
+                color.red(), color.green(), color.blue()
+            )
+        )
+
+    def actualizar_desde_cursor(self):
+        """Refleja en la barra el formato del texto donde esta el cursor.
+
+        Los controles bloquean sus senales mientras se actualizan
+        (blockSignals), para que marcar un boton no vuelva a aplicar el
+        formato al cursor ni dispare un bucle de senales.
+        """
+        formato = self.editor.textCursor().charFormat()
+
+        controles = (
+            self.combo_tipografia,
+            self.combo_tamano,
+            self.boton_negrita,
+            self.boton_cursiva,
+            self.boton_subrayado,
+        )
+        estados = [control.blockSignals(True) for control in controles]
+        try:
+            familias = formato.fontFamilies()
+            if familias:
+                indice = self.combo_tipografia.findText(familias[0])
+                if indice >= 0:
+                    self.combo_tipografia.setCurrentIndex(indice)
+
+            tamano = formato.fontPointSize()
+            if tamano:
+                self.combo_tamano.setCurrentIndex(self._indice_de_tamano(tamano))
+
+            self.boton_negrita.setChecked(
+                formato.fontWeight() >= int(QFont.Weight.Bold)
+            )
+            self.boton_cursiva.setChecked(formato.fontItalic())
+            self.boton_subrayado.setChecked(formato.fontUnderline())
+
+            color = formato.foreground().color()
+            if color.isValid():
+                self._color_actual = color
+                self._pintar_boton_color(color)
+        finally:
+            for control, estado in zip(controles, estados):
+                control.blockSignals(estado)
+
+    def _indice_de_tamano(self, tamano):
+        """Indice del tamano de la lista mas cercano al valor dado."""
+        return min(range(len(TAMANOS)), key=lambda i: abs(TAMANOS[i] - tamano))
 
 
 # =========================================================================

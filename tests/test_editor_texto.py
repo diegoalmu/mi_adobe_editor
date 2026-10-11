@@ -1,4 +1,4 @@
-"""Pruebas de app/editor_texto.py (Tarea 3 del diseno).
+"""Pruebas de app/editor_texto.py (Tareas 3 y 4 del diseno).
 
 La plataforma offscreen de Qt la fija tests/conftest.py antes de
 importar los modulos de la aplicacion.
@@ -7,10 +7,11 @@ importar los modulos de la aplicacion.
 # pyright: reportMissingImports=false
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent, QFont, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QKeyEvent, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QApplication
 
-from editor_texto import EditorTextoInline, documento_a_fragmentos
+from editor_texto import BarraFormato, EditorTextoInline, documento_a_fragmentos
+from formato_html import CARPETA_FUENTES_WINDOWS, tipografias_disponibles
 
 # QApplication unica para todas las pruebas (crear varias da error)
 _aplicacion = QApplication.instance() or QApplication([])
@@ -61,3 +62,81 @@ def test_ctrl_enter_emite_aceptado():
     )
     editor.keyPressEvent(evento)
     assert recibidos == ["aceptado"]
+
+
+def test_barra_negrita_aplica_solo_a_la_seleccion():
+    editor = EditorTextoInline()
+    editor.setPlainText("uno dos tres")
+    barra = BarraFormato(editor)
+
+    # Seleccionar la palabra "dos" (posiciones 4 a 7)
+    cursor = editor.textCursor()
+    cursor.setPosition(4)
+    cursor.setPosition(7, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+
+    # Activar el boton Negrita de la barra
+    barra.boton_negrita.toggle()
+
+    fragmentos = documento_a_fragmentos(editor.document())
+    con_dos = [f for f in fragmentos if "dos" in f["texto"]]
+    assert len(con_dos) == 1
+    assert con_dos[0]["negrita"] is True
+
+    sin_negrita = [f for f in fragmentos if not f["negrita"]]
+    assert any("uno" in f["texto"] for f in sin_negrita)
+    assert any("tres" in f["texto"] for f in sin_negrita)
+
+
+def test_barra_refleja_negrita_del_cursor():
+    editor = EditorTextoInline()
+    editor.setPlainText("uno dos tres")
+
+    # Poner "dos" en negrita con un cursor de Qt directamente
+    cursor = editor.textCursor()
+    cursor.setPosition(4)
+    cursor.setPosition(7, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+    formato = QTextCharFormat()
+    formato.setFontWeight(QFont.Weight.Bold)
+    cursor.mergeCharFormat(formato)
+
+    # Dejar el cursor en "uno" (sin negrita) y recien ahi crear la barra
+    cursor_uno = editor.textCursor()
+    cursor_uno.setPosition(1)
+    editor.setTextCursor(cursor_uno)
+
+    barra = BarraFormato(editor)
+    assert not barra.boton_negrita.isChecked()
+
+    # Mover el cursor dentro de "dos": el boton debe marcarse solo
+    cursor_dos = editor.textCursor()
+    cursor_dos.setPosition(5)
+    editor.setTextCursor(cursor_dos)
+    assert barra.boton_negrita.isChecked()
+
+
+def test_barra_aplicar_color_a_la_seleccion():
+    editor = EditorTextoInline()
+    editor.setPlainText("uno dos tres")
+    barra = BarraFormato(editor)
+
+    cursor = editor.textCursor()
+    cursor.setPosition(4)
+    cursor.setPosition(7, QTextCursor.MoveMode.KeepAnchor)
+    editor.setTextCursor(cursor)
+
+    # Las pruebas usan solo aplicar_color; el dialogo no se abre nunca
+    barra.aplicar_color(QColor(200, 10, 50))
+
+    fragmentos = documento_a_fragmentos(editor.document())
+    con_dos = [f for f in fragmentos if "dos" in f["texto"]]
+    assert con_dos[0]["color"] == (200, 10, 50)
+
+
+def test_barra_tipografias_solo_las_disponibles():
+    barra = BarraFormato(EditorTextoInline())
+    esperadas = tipografias_disponibles(CARPETA_FUENTES_WINDOWS)
+    assert barra.combo_tipografia.count() == len(esperadas)
+    for indice, nombre in enumerate(esperadas):
+        assert barra.combo_tipografia.itemText(indice) == nombre

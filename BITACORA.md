@@ -539,6 +539,91 @@ funcionamiento todavía no lo usa; eso llega en la Tarea 5.
 
 ---
 
+## Sesión 12 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 4 del plan `DISENO_EDITOR_TEXTO.md`: agregar
+a `app/editor_texto.py` la clase `BarraFormato(QToolBar)` con selector de
+tipografía, tamaño, botones de Negrita/Cursiva/Subrayado, botón de color,
+Aceptar y Cancelar, y sus pruebas en modo offscreen. No se tocó `main.py`.
+
+**Actividades realizadas:**
+1. **`app/editor_texto.py` modificado** (de 112 a 314 líneas):
+   - Líneas 1–28: se actualizó el docstring del módulo para mencionar
+     `BarraFormato` y se agregaron los imports (`QColor`, `QComboBox`,
+     `QColorDialog`, `QPushButton`, `QToolBar`, `QToolButton`, y de
+     `formato_html` las constantes `CARPETA_FUENTES_WINDOWS` y
+     `tipografias_disponibles`). Los imports entre módulos de `app/` van
+     sin prefijo de paquete, como manda `AGENTS.md`.
+   - Línea 67: constante `TAMANOS` con los 16 tamaños en puntos que ofrece
+     la barra (8 a 72, como un procesador de textos clásico).
+   - Líneas 70–249: clase `BarraFormato(QToolBar)` →
+     - `__init__` (líneas 85–143): recibe el editor como parámetro
+       obligatorio; arma el selector de tipografía con **solo**
+       `tipografias_disponibles(CARPETA_FUENTES_WINDOWS)` (líneas 90–95),
+       el de tamaño con `TAMANOS` (líneas 98–102), los botones activables
+       N/C/S (`QToolButton` con `setCheckable(True)`, líneas 105–119), el
+       botón Color (líneas 122–125), Aceptar y Cancelar (líneas 128–134);
+       al final se conecta `editor.cursorPositionChanged` a
+       `actualizar_desde_cursor` y se llama una vez (líneas 137–138). Se
+       usaron enums completos de Qt en todo el archivo (p. ej.
+       `QFont.Weight.Bold`).
+     - Cada control aplica el formato **solo a la selección** con
+       `mergeCurrentCharFormat`: `aplicar_tipografia` (145–151),
+       `aplicar_tamano` (153–159), `alternar_negrita` (161–168),
+       `alternar_cursiva` (170–174) y `alternar_subrayado` (176–180).
+       Sin selección aplica a lo que se escriba después (comportamiento
+       normal de Qt, igual que Word).
+     - Botón de color en **dos partes**: `elegir_color` (líneas 182–186)
+       abre el `QColorDialog` de Windows y `aplicar_color(QColor)`
+       (líneas 188–194) aplica el color a la selección y pinta el botón
+       con `_pintar_boton_color` (196–202). Las pruebas usan solo
+       `aplicar_color`; el diálogo nunca se abre en pruebas.
+     - Señales `aceptar` y `cancelar` (líneas 80–81), emitidas por los
+       botones Aceptar/Cancelar.
+     - `actualizar_desde_cursor` (líneas 204–244): lee el
+       `charFormat()` del cursor y refleja familia, tamaño, los tres
+       botones y el color; **bloquea las señales de sus controles**
+       (`blockSignals`) mientras actualiza, para que marcar un botón no
+       vuelva a aplicar el formato al cursor ni dispare un bucle de
+       señales. El tamaño más cercano se resuelve con
+       `_indice_de_tamano` (246–249).
+2. **`tests/test_editor_texto.py` modificado** (de 63 a 142 líneas), con
+   las 2 pruebas que pide el diseño más 2 que cubren las reglas
+   adicionales (color y tipografías):
+   - `test_barra_negrita_aplica_solo_a_la_seleccion` (líneas 67–89):
+     selecciona "dos" en "uno dos tres", activa `barra.boton_negrita` y
+     verifica con `documento_a_fragmentos` que solo "dos" quedó en
+     negrita.
+   - `test_barra_refleja_negrita_del_cursor` (líneas 91–117): pone "dos"
+     en negrita, deja el cursor en "uno", crea la barra (botón sin
+     marcar) y al mover el cursor dentro de "dos" verifica que el botón
+     Negrita se marca solo.
+   - `test_barra_aplicar_color_a_la_seleccion` (líneas 119–135): usa
+     `aplicar_color(QColor(200, 10, 50))` sobre "dos" y verifica la
+     tupla rgb del fragmento; el diálogo no se abre.
+   - `test_barra_tipografias_solo_las_disponibles` (líneas 137–142):
+     verifica que el combo contiene exactamente
+     `tipografias_disponibles(CARPETA_FUENTES_WINDOWS)`.
+3. **Pyright**: 39 errores, los mismos 39 de ruido conocido de `app/main.py`;
+   cero errores en `app/editor_texto.py` ni `tests/test_editor_texto.py`.
+4. **Pytest**: 13 pruebas (3 de la Tarea 3 + 4 nuevas + 4 de la Tarea 1 +
+   2 de la Tarea 2), todas en verde.
+
+**Resultado:** La barra de formato queda completa y probada: aplica
+tipografía, tamaño, negrita, cursiva, subrayado y color solo a la
+selección, refleja el formato del cursor sin bucles de señales, y expone
+las señales `aceptar`/`cancelar`. Con esto están listos el cuadro editable
+(Tarea 3) y la barra (Tarea 4); el programa en funcionamiento todavía no
+los usa porque falta la Tarea 5, que los conecta en `main.py`.
+
+**Pendiente:**
+- Tarea 5: conectar todo en `app/main.py` (`editar_contenido_en_punto`),
+  con su validación visual de Diego.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se
+  borró nada sin permiso.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
