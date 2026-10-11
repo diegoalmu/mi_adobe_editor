@@ -3,8 +3,9 @@ formato_html.py - Tipografias y HTML para el editor de texto inline
 ====================================================================
 
 Funciones puras (sin ventanas) que convierten la lista de fragmentos del
-editor en HTML para `pagina.insert_htmlbox`, y que arman el CSS con las
-tipografias disponibles en el sistema.
+editor en HTML para `pagina.insert_htmlbox`, que arman el CSS con las
+tipografias disponibles en el sistema, y que comprueban si el texto cabe
+en un cuadro antes de escribirlo en el PDF.
 
 Las tipografias son una lista corta (Arial, Times New Roman, Calibri,
 Verdana y Courier New) porque cada una usada se incrusta en el PDF y
@@ -14,6 +15,8 @@ truena por una fuente faltante).
 """
 
 import os
+
+import fitz  # PyMuPDF
 
 
 # =========================================================================
@@ -142,3 +145,41 @@ def fragmentos_a_html(fragmentos):
 
         trozos.append(f'<span style="{"; ".join(estilos)}">{texto}</span>')
     return "".join(trozos)
+
+
+# =========================================================================
+# ESCRIBIR EN EL PDF
+# =========================================================================
+
+def cabe_texto_con_formato(rect, html, css, archivo):
+    """Prueba si el HTML cabe en el rectangulo dado, sin tocar el documento real.
+
+    Se prueba en un documento PDF temporal descartable (mismo patron que
+    texto_cabe_en_cuadro de main.py) con insert_htmlbox(..., scale_low=1),
+    lo que significa que el texto NUNCA se reduce para que quepa: si no
+    cabe, insert_htmlbox devuelve una holgura negativa y aqui se responde
+    False. Devuelve True/False.
+    """
+    documento_prueba = fitz.open()
+    try:
+        pagina_prueba = documento_prueba.new_page(
+            width=max(rect.width, 10) + 20, height=max(rect.height, 10) + 20
+        )
+        rect_prueba = fitz.Rect(0, 0, rect.width, rect.height)
+        resultado = pagina_prueba.insert_htmlbox(
+            rect_prueba, html, css=css, archive=archivo, scale_low=1,
+        )
+        # resultado = (holgura, escala); holgura negativa = no cupo
+        return resultado[0] >= 0
+    finally:
+        documento_prueba.close()
+
+
+def insertar_texto_con_formato(pagina, rect, html, css, archivo):
+    """Escribe el HTML con formato mixto en la pagina real del documento.
+
+    Solo se llama despues de confirmar con cabe_texto_con_formato que el
+    texto cabe. Se usa scale_low=1 para que el texto nunca se reduzca para
+    que quepa: el usuario ve el mismo tamano que en el editor.
+    """
+    pagina.insert_htmlbox(rect, html, css=css, archive=archivo, scale_low=1)

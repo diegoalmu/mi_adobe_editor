@@ -422,6 +422,56 @@ funcionamiento no cambió todavía (nada lo importa aún).
 
 ---
 
+## Sesión 10 — 2026-10-10
+
+**Objetivo de la sesión:** Tarea 2 del plan `DISENO_EDITOR_TEXTO.md`: agregar a
+`app/formato_html.py` las funciones que comprueban si un HTML con formato cabe en
+un cuadro y que lo escriben en el PDF real con `insert_htmlbox`, más sus pruebas
+con un PDF en memoria. No se tocó `app/main.py` ni la ventana de edición.
+
+**Actividades realizadas:**
+1. **`app/formato_html.py` modificado**:
+   - Línea 19: se agregó `import fitz  # PyMuPDF` (el módulo ya lo usará para
+     crear el documento temporal y escribir en la página).
+   - Líneas 154–175: `cabe_texto_con_formato(rect, html, css, archivo)` → crea un
+     documento PDF temporal descartable (mismo patrón que `texto_cabe_en_cuadro`
+     de `main.py`), llama `insert_htmlbox(..., scale_low=1)` y devuelve
+     `True`/`False` según la holgura devuelta (negativa = no cabe). Con
+     `scale_low=1` el texto nunca se reduce para que quepa.
+   - Líneas 178–185: `insertar_texto_con_formato(pagina, rect, html, css,
+     archivo)` → escribe en la página real con el mismo `scale_low=1`; solo se
+     llama después de confirmar con la función anterior que cabe.
+   - Líneas 5–7: se ajustó el docstring del módulo para mencionar estas
+     funciones.
+2. **`tests/test_insertar_formato.py` creado** (85 líneas), con las 2 pruebas
+   que pide el diseño, usando un PDF en memoria (`fitz.open()` sin archivos):
+   - `test_inserta_negrita_solo_en_actualizado` (líneas 47–68): construye el
+     HTML de "Precio actualizado" con solo la segunda palabra en negrita (con
+     `fragmentos_a_html`), confirma que cabe, lo inserta y verifica con
+     `get_text("dict")` que hay un span en negrita con "actualizado" (bit 16 de
+     flags = `TEXT_FONT_BOLD`) y otro sin negrita con "Precio".
+   - `test_texto_enorme_no_cabe_y_no_modifica_el_documento` (líneas 71–85):
+     4000 palabras en un cuadro de 40x40 puntos → `cabe_texto_con_formato`
+     devuelve `False` y el documento real queda intacto (el texto de la página
+     no cambia).
+3. **Pyright**: 39 errores, los mismos 39 de ruido conocido de `app/main.py`;
+   cero errores nuevos en los archivos creados o modificados.
+4. **Pytest**: 6 pruebas (las 4 de la Tarea 1 + las 2 nuevas), todas en verde.
+
+**Resultado:** El lado PyMuPDF de `app/formato_html.py` queda completo para el
+editor de texto: ya se puede pasar de fragmentos → HTML → PDF con formato mixto,
+y antes de tocar el documento real se puede preguntar si el texto cabe. El
+programa en funcionamiento no cambió todavía (nada importa estas funciones
+todavía); eso llega en la Tarea 5.
+
+**Pendiente:**
+- Tarea 3: `app/editor_texto.py` con la clase `EditorTextoInline` y la función
+  `documento_a_fragmentos`, y sus pruebas en modo offscreen.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se borró
+  nada sin permiso.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
