@@ -1,0 +1,9 @@
+# Herramientas solo para desarrollo.
+# El programa no las necesita para funcionar: solo se usan para
+# verificar el código antes de entregarlo.
+
+# Pruebas automáticas (carpeta tests/)
+pytest>=9.1.1
+
+# Revisión de tipos sin ejecutar el programa (pyright)
+pyright>=1.1.414

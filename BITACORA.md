@@ -274,8 +274,48 @@ realmente hace. Base ordenada para arrancar la Fase 5.
 - Ícono propio del programa y creación de la carpeta `assets/`
 - Fase 9: manual de usuario, capturas de pantalla, video demo
 - **Git:** los cambios de esta sesión están en la rama local `estandarizar`, que además
-  tenía 2 commits sin publicar desde el 2026-09-18. Falta decidir con el usuario cuándo
+  tenía 2 commits sin publicar desde 2026-09-18. Falta decidir con el usuario cuándo
   hacer commit y cuándo subirlos a GitHub.
+
+---
+
+## Sesión 7 — 2026-10-10
+
+**Objetivo de la sesión:** Tarea 0 del plan `DISENO_EDITOR_TEXTO.md`: preparar las
+herramientas de desarrollo (pytest y pyright) y el punto de partida de las pruebas
+automáticas (`tests/conftest.py`), sin tocar el código del programa.
+
+**Actividades realizadas:**
+1. **`requirements-dev.txt` creado** con `pytest` y `pyright`, marcados como
+   dependencias solo de desarrollo (el programa no las necesita para funcionar).
+2. **Instalación en el `venv`** con `pip install -r requirements-dev.txt`:
+   `pytest 9.1.1` se instaló nuevo (más sus dependencias `colorama` e `iniconfig`);
+   `pyright 1.1.414` ya estaba instalado.
+3. **`tests/conftest.py` creado**: agrega la raíz del proyecto y `app/` a `sys.path`
+   (los imports van sin prefijo de paquete, igual que al lanzar `iniciar.bat`) y
+   fija `QT_QPA_PLATFORM=offscreen` para que las ventanas de prueba no se abran en
+   pantalla.
+4. Verificación manual del `conftest.py` con `runpy`: la variable
+   `QT_QPA_PLATFORM` queda en `offscreen` y las dos rutas aparecen en `sys.path`.
+5. **Pyright**: 44 errores, todos preexistentes en `app/main.py` (enums cortos de
+   Qt, `Document` iterable, `PDF_ENCRYPT_AES_256`, `pixmap_limpio`, más algunos
+   `reportOptionalMemberAccess`/`reportOptionalSubscript`); ninguno en los archivos
+   nuevos.
+6. **Pytest**: corre sin error de configuración; termina con "no tests ran" y
+   código de salida 5, que es el código estándar de pytest cuando no hay pruebas
+   (todavía no existe ningún archivo `test_*.py`).
+
+**Resultado:** Base de pruebas lista: a partir de la Tarea 1, cada módulo nuevo
+tendrá sus pruebas en `tests/` y bastará con `pytest -v`. El programa no se tocó.
+
+**Pendiente:**
+- Tarea 1: `app/formato_html.py` (tipografías, CSS, fragmentos → HTML) y sus pruebas.
+- Errores de pyright en `app/main.py` que no están en la lista de "ruido conocido"
+  de AGENTS.md (`"widget" is not a known attribute of "None"` en la línea 610 y
+  varios `Object of type "None" is not subscriptable` en 778, 1298, 1307 y 1384).
+  No se corrigieron: están fuera del alcance de la Tarea 0.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` es el resto de pruebas de
+  una sesión anterior que ya no existen; no se borró nada sin permiso.
 
 ---
 
