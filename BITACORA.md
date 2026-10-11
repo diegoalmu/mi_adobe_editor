@@ -422,7 +422,7 @@ funcionamiento no cambió todavía (nada lo importa aún).
 
 ---
 
-## Sesión 10 — 2026-10-10
+## Sesión 10 — 2026-10-11
 
 **Objetivo de la sesión:** Tarea 2 del plan `DISENO_EDITOR_TEXTO.md`: agregar a
 `app/formato_html.py` las funciones que comprueban si un HTML con formato cabe en
@@ -467,6 +467,73 @@ todavía); eso llega en la Tarea 5.
 **Pendiente:**
 - Tarea 3: `app/editor_texto.py` con la clase `EditorTextoInline` y la función
   `documento_a_fragmentos`, y sus pruebas en modo offscreen.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se borró
+  nada sin permiso.
+
+---
+
+## Sesión 11 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 3 del plan `DISENO_EDITOR_TEXTO.md`: crear
+`app/editor_texto.py` con la clase `EditorTextoInline` (el `QTextEdit` que se
+pone encima de un párrafo) y la función `documento_a_fragmentos`, más sus
+pruebas en modo offscreen. También corregir la fecha de la sesión anterior y
+agregar la regla de la fecha a `AGENTS.md`.
+
+**Actividades realizadas:**
+1. **`app/editor_texto.py` creado** (112 líneas):
+   - Líneas 20–46: clase `EditorTextoInline(QTextEdit)` → sin marco
+     (`QFrame.Shape.NoFrame`, línea 33), fondo blanco semitransparente
+     (`rgba(255, 255, 255, 200)`, línea 34) y señales `cancelado`/`aceptado`
+     (líneas 28–29). En `keyPressEvent` (líneas 36–46), Esc → `cancelado` y
+     Ctrl+Enter (`Qt.Key.Key_Return`/`Key_Enter` + `ControlModifier`) →
+     `aceptado`; todo lo demás pasa al `QTextEdit` de base. Se usaron enums
+     completos de Qt en todo el archivo.
+   - Líneas 53–112: `documento_a_fragmentos(documento_qt)` → recorre bloques
+     y fragmentos del documento con `bloque.begin()` + `iterador += 1`, y
+     devuelve diccionarios con `texto`, `familia`, `tamano`, `negrita`,
+     `cursiva`, `subrayado` y `color` (tupla rgb), el formato que consume
+     `fragmentos_a_html`. `negrita` se decide con
+     `fontWeight() >= int(QFont.Weight.Bold)` (línea 87); la familia y el
+     tamaño caen a la fuente por defecto del documento si el fragmento no los
+     trae (líneas 76–77); el color negro `(0, 0, 0)` si es inválido (líneas
+     78–82). Entre bloques agrega `"\n"` al final del último fragmento, o un
+     fragmento solo con `"\n"` si el bloque está vacío (líneas 94–107), para
+     que después se convierta en `<br>`.
+2. **`tests/test_editor_texto.py` creado** (63 líneas, con
+   `# pyright: reportMissingImports=false` y `QApplication` única a nivel de
+   módulo), con 3 pruebas:
+   - `test_documento_a_fragmentos_con_negrita_en_dos`: escribe "uno dos tres",
+     selecciona "dos" (posiciones 4–7), le pone negrita con
+     `mergeCharFormat` y verifica que ese fragmento tiene `negrita=True` y
+     que "uno"/"tres" no.
+   - `test_esc_emite_cancelado` y `test_ctrl_enter_emite_aceptado`:
+     envían un `QKeyEvent` directo a `keyPressEvent` y comprueban la señal.
+3. **Verificación previa de la API de Qt** (script temporal fuera del
+   repositorio): se confirmó que `iterador += 1`, `mergeCharFormat`,
+   `fontFamilies()` (el antiguo `fontFamily()` está obsoleto) y la lectura de
+   `fontWeight()`, `fontItalic()`, `fontUnderline()` y `foreground()` funcionan
+   en el venv; se descartó el script sin borrar nada del proyecto.
+4. **`BITACORA.md` corregido**: la sesión 10 estaba fechada 2026-10-10 y el
+   comando `Get-Date -Format yyyy-MM-dd` dio 2026-10-11, así que se cambió la
+   fecha de la sesión 10 a 2026-10-11 (misma fecha que esta sesión).
+5. **`AGENTS.md` modificado** (líneas 59–62): en "Al terminar cada sesión",
+   punto 1, se agregó la regla de obtener la fecha con
+   `Get-Date -Format yyyy-MM-dd` y nunca copiarla de la entrada anterior.
+6. **Pyright**: 39 errores, los mismos 39 de ruido conocido de `app/main.py`;
+   cero errores en `app/editor_texto.py` ni `tests/test_editor_texto.py`.
+7. **Pytest**: 9 pruebas (4 de la Tarea 1 + 2 de la Tarea 2 + 3 nuevas),
+   todas en verde.
+
+**Resultado:** El lado Qt del editor de texto queda listo: `EditorTextoInline`
+es el cuadro que se superpondrá al párrafo (con Esc/Ctrl+Enter) y
+`documento_a_fragmentos` traduce lo que el usuario escribió al formato de
+fragmentos que ya sabe consumir `formato_html.py`. El programa en
+funcionamiento todavía no lo usa; eso llega en la Tarea 5.
+
+**Pendiente:**
+- Tarea 4: la barra de formato (negrita, cursiva, etc.) según
+  `DISENO_EDITOR_TEXTO.md`.
 - `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se borró
   nada sin permiso.
 

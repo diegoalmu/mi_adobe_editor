@@ -58,6 +58,8 @@ Licencia AGPL-3.0. Código y comentarios en español.
 
 1. Agrega una entrada en `BITACORA.md` con la plantilla que está al final
    de ese archivo (fecha, objetivo, actividades, resultado, pendientes).
+   La fecha se obtiene con `Get-Date -Format yyyy-MM-dd`; nunca se copia
+   de la entrada anterior.
 2. Entrega un resumen con: archivos creados o modificados, qué se cambió
    en cada uno (con números de línea), resultado de pyright y de pytest, y
    qué debe validar Diego visualmente (si aplica).
