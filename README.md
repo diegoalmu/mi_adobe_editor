@@ -58,7 +58,7 @@ mi_adobe_editor/
 ├── INSTALACION_LINUX.md      # Instalación paso a paso en Linux
 ├── GITHUB_DESKTOP.md         # Cómo publicar el proyecto con GitHub Desktop
 ├── EMPAQUETADO.md            # Cómo generar el ejecutable independiente (sin Python)
-├── LICENSE                   # Licencia MIT
+├── LICENSE                   # Licencia AGPL-3.0
 └── requirements.txt          # Librerías necesarias
 ```
 
