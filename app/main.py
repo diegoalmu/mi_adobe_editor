@@ -607,6 +607,8 @@ class EditorPDF(QMainWindow):
         # Limpiar el contenedor
         while self.layout_paginas.count():
             item = self.layout_paginas.takeAt(0)
+            if item is None:
+                break
             widget = item.widget()
             if widget:
                 widget.deleteLater()
@@ -771,6 +773,8 @@ class EditorPDF(QMainWindow):
             QMessageBox.critical(self, "No se pudo agregar la anotacion", str(error))
 
     def redibujar_pagina_individual(self, numero_pagina):
+        if self.documento is None:
+            return
         etiqueta_objetivo = self.etiquetas_paginas[numero_pagina]
         if etiqueta_objetivo is None:
             return  # esta pagina tuvo un error al dibujarse originalmente, no hay donde redibujar
@@ -1295,6 +1299,8 @@ class EditorPDF(QMainWindow):
 
     def escribir_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color):
         """Escribe una linea de texto en el punto donde el usuario dio clic."""
+        if self.documento is None:
+            return
         pagina = self.documento[numero_pagina]
         try:
             pagina.insert_text((punto.x, punto.y), texto, fontsize=tamano, fontname=fuente, color=color)
@@ -1304,6 +1310,8 @@ class EditorPDF(QMainWindow):
 
     def escribir_cuadro_de_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color, ancho, alto):
         """Escribe un cuadro de texto (varias lineas) en el punto donde el usuario dio clic."""
+        if self.documento is None:
+            return
         pagina = self.documento[numero_pagina]
         try:
             rect = fitz.Rect(punto.x, punto.y, punto.x + ancho, punto.y + alto)
@@ -1381,6 +1389,8 @@ class EditorPDF(QMainWindow):
 
     def colocar_imagen_en_punto(self, numero_pagina, punto, ruta, ancho, alto, mantener_proporcion):
         """Coloca una imagen ya elegida en el punto donde el usuario dio clic (esquina superior izquierda)."""
+        if self.documento is None:
+            return
         pagina = self.documento[numero_pagina]
         nuevo_rect = fitz.Rect(punto.x, punto.y, punto.x + ancho, punto.y + alto)
         try:

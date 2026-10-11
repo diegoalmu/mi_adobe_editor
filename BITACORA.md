@@ -319,6 +319,50 @@ tendrá sus pruebas en `tests/` y bastará con `pytest -v`. El programa no se to
 
 ---
 
+## Sesión 8 — 2026-10-10
+
+**Objetivo de la sesión:** Mantenimiento (fuera del plan `DISENO_EDITOR_TEXTO.md`):
+corregir los 5 errores de pyright que quedaron al aire en `app/main.py` después de
+la Sesión 7 y que no forman parte del "ruido conocido" de AGENTS.md, sin tocar nada
+más.
+
+**Actividades realizadas:**
+1. **`app/main.py` línea 610** (`dibujar_todas_las_paginas`): `takeAt(0)` puede
+   devolver `None`. Se agregó `if item is None: continue` (líneas 610–611) antes de
+   llamar `item.widget()`.
+2. **`app/main.py` línea 776** (`redibujar_pagina_individual`): al inicio del método
+   se agregó `if self.documento is None: return` (líneas 776–777), el mismo estilo
+   que ya se usa en otros métodos (por ejemplo `al_seleccionar_rectangulo`).
+3. **`app/main.py` línea 1302** (`escribir_texto_en_punto`): mismo guard
+   `if self.documento is None: return` (líneas 1302–1303) antes de
+   `pagina = self.documento[numero_pagina]`.
+4. **`app/main.py` línea 1313** (`escribir_cuadro_de_texto_en_punto`): mismo guard
+   (líneas 1313–1314).
+5. **`app/main.py` línea 1392** (`colocar_imagen_en_punto`): mismo guard
+   (líneas 1392–1393).
+6. **Pyright**: de 44 errores a **39**, todos restantes son el ruido conocido de
+   AGENTS.md (enums cortos de Qt, `Document` iterable, `PDF_ENCRYPT_AES_256`,
+   `pixmap_limpio`). Los 5 objetivos desaparecieron.
+7. **Pytest**: sin pruebas todavía (sale "no tests ran", código 5), igual que en la
+   Sesión 7; no hay errores de configuración.
+
+**Resultado:** `app/main.py` ya no tiene errores de pyright fuera de la lista de
+ruido conocido. Las 5 correcciones son defensivas: en condiciones normales el
+documento está abierto y `takeAt` no devuelve `None`, así que el comportamiento del
+programa no cambia; solo se evita un choque teórico si eso llegara a pasar.
+
+**Pendiente:**
+- Tarea 1 del diseño: `app/formato_html.py` (tipografías, CSS, fragmentos → HTML)
+  y sus pruebas.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se borró
+  nada sin permiso.
+- **Corrección posterior (misma sesión):** en `dibujar_todas_las_paginas` se cambió
+  `continue` por `break` en la guarda de `takeAt` (línea 611): si `takeAt(0)`
+  devolviera `None`, `count` no bajaría y `continue` causaría un ciclo infinito;
+  con `break` se sale del `while` y no queda colgado el programa.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
