@@ -1,19 +1,26 @@
 """
-Mi-Adobe-PDF - Fase 2 (v2): Scroll continuo + indicador de pagina visible.
-============================================================================
+Mi-Adobe-PDF - Editor de PDF de escritorio (Python + PySide6 + PyMuPDF)
+=======================================================================
 
-Cambios respecto a la version anterior:
-    - Ya no se ve una pagina a la vez con botones "siguiente/anterior".
-      Ahora TODAS las paginas se muestran apiladas, una debajo de otra,
-      y te desplazas con la rueda del mouse / la barra de scroll,
-      igual que en Adobe Reader o cualquier lector normal.
-    - Los botones "<- Pagina" / "Pagina ->" siguen existiendo, pero ahora
-      lo que hacen es saltar el scroll directo a esa pagina.
-    - Se agrego una etiqueta fija en la barra de herramientas que siempre
-      dice "Pagina X de Y", actualizandose sola mientras haces scroll.
-    - Las herramientas de anotacion (resaltar, subrayar, etc.) ahora saben
-      sobre CUAL pagina especifica estas dibujando, sin importar cual sea
-      la "pagina actual" mostrada en el indicador.
+Estado actual del programa:
+    - Visor con scroll continuo (todas las paginas apiladas, como Adobe
+      Reader) e indicador fijo "Pagina X de Y" que se actualiza solo.
+    - Herramientas de anotacion: resaltar, subrayar, tachar, texto libre,
+      rectangulo, linea, circulo y firma por imagen.
+    - Edicion de contenido existente: texto, imagenes y formas de color
+      (al elegir la herramienta "Editar contenido" se ven los recuadros).
+    - Gestion de paginas: rotar, eliminar, insertar en blanco y reordenar
+      con cuadricula de miniaturas (estilo panel de Adobe Acrobat).
+    - Archivo: unir PDFs, dividir por paginas, exportar a PNG, comprimir,
+      convertir a Word (.docx) y OCR para hacer el PDF buscable.
+    - Seguridad: agregar y quitar contrasena.
+
+Como funciona el visor:
+    - Todas las paginas se muestran apiladas, una debajo de otra, y te
+      desplazas con la rueda del mouse / la barra de scroll.
+    - Las herramientas de anotacion saben sobre CUAL pagina especifica
+      estas dibujando, sin importar cual sea la "pagina actual" del
+      indicador de la barra de herramientas.
 """
 
 import sys
@@ -419,7 +426,7 @@ class EditorPDF(QMainWindow):
         self.etiquetas_paginas = []      # lista de EtiquetaPDF, una por pagina
         self.offsets_top = []            # posicion vertical (en pixeles) donde empieza cada pagina
 
-        self.setWindowTitle("Mi Adobe PDF - Fase 2")
+        self.setWindowTitle("Mi Adobe PDF")
         self.resize(1100, 850)
 
         # --- Contenedor vertical donde se apilan TODAS las paginas ---
@@ -1509,7 +1516,7 @@ class EditorPDF(QMainWindow):
         etiqueta_vacia.setAlignment(Qt.AlignCenter)
         self.layout_paginas.addWidget(etiqueta_vacia)
 
-        self.setWindowTitle("Mi Adobe PDF - Fase 2")
+        self.setWindowTitle("Mi Adobe PDF")
         self.actualizar_indicador_pagina()
 
     def convertir_a_word(self):
@@ -1565,50 +1572,6 @@ class EditorPDF(QMainWindow):
         finally:
             if ruta_temporal and os.path.exists(ruta_temporal):
                 os.remove(ruta_temporal)
-
-    def convertir_a_word(self):
-        if self.documento is None:
-            QMessageBox.information(self, "Aviso", "Primero abre un PDF.")
-            return
-        ruta_destino, _ = QFileDialog.getSaveFileName(
-            self, "Guardar como Word", "", "Documentos Word (*.docx)"
-        )
-        if not ruta_destino:
-            return
-        if not ruta_destino.lower().endswith(".docx"):
-            ruta_destino += ".docx"
-
-        ruta_pdf_temporal = None
-        try:
-            # Import aqui adentro (y no arriba del archivo) para que el programa
-            # siga abriendo aunque a alguien le falte instalar pdf2docx.
-            from pdf2docx import Converter
-
-            # Guardamos el documento actual (con tus anotaciones/cambios) en un PDF
-            # temporal, porque pdf2docx necesita leer un archivo real desde el disco.
-            descriptor, ruta_pdf_temporal = tempfile.mkstemp(suffix=".pdf")
-            os.close(descriptor)
-            self.documento.save(ruta_pdf_temporal)
-
-            self.statusBar().showMessage("Convirtiendo a Word, esto puede tardar unos segundos...")
-            QApplication.processEvents()  # deja que se vea el mensaje antes de la parte pesada
-
-            conversor = Converter(ruta_pdf_temporal)
-            conversor.convert(ruta_destino)
-            conversor.close()
-
-            QMessageBox.information(self, "Listo", f"Documento Word guardado en:\n{ruta_destino}")
-        except ImportError:
-            QMessageBox.critical(
-                self, "Falta una libreria",
-                "Falta instalar 'pdf2docx'. Con tu (venv) activado, ejecuta:\n\npip install pdf2docx"
-            )
-        except Exception as error:
-            QMessageBox.critical(self, "Error al convertir", str(error))
-        finally:
-            if ruta_pdf_temporal and os.path.exists(ruta_pdf_temporal):
-                os.remove(ruta_pdf_temporal)
-            self.statusBar().clearMessage()
 
     def hacer_ocr(self):
         """
