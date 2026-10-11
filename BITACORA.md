@@ -363,6 +363,65 @@ programa no cambia; solo se evita un choque teórico si eso llegara a pasar.
 
 ---
 
+## Sesión 9 — 2026-10-10
+
+**Objetivo de la sesión:** Tarea 1 del plan `DISENO_EDITOR_TEXTO.md`: crear
+`app/formato_html.py` con las tipografías, el CSS de los `@font-face` y la
+conversión de fragmentos del editor a HTML para `insert_htmlbox`, más sus
+pruebas automáticas. No se tocó `app/main.py` ni la ventana de edición.
+
+**Actividades realizadas:**
+1. **`app/formato_html.py` creado** (144 líneas), con tres piezas:
+   - Constante `TIPOGRAFIAS` (líneas 25–56): la tabla del diseño con las 5
+     tipografías (Arial, Times New Roman, Calibri, Verdana y Courier New) y
+     sus 4 archivos .ttf cada una (normal, negrita, cursiva, negrita+cursiva).
+   - `CARPETA_FUENTES_WINDOWS = r"C:\Windows\Fonts"` (línea 59).
+   - `tipografias_disponibles(carpeta)` (líneas 62–74): devuelve solo los
+     nombres cuyos 4 archivos existen en la carpeta indicada; si falta
+     alguno, esa tipografía no se ofrece y el programa no truena.
+   - `css_tipografias(carpeta)` (líneas 77–100): un `@font-face` por
+     variante (familia + font-weight + font-style + `src: url(archivo.ttf)`)
+     de cada tipografía disponible; con carpeta vacía el CSS queda vacío.
+     Los archivos se referencian solo por nombre porque el CSS se pasará a
+     `insert_htmlbox` junto con un `fitz.Archive` de esa misma carpeta
+     (eso llega en la Tarea 2).
+   - `fragmentos_a_html(fragmentos)` (líneas 107–144): convierte cada
+     fragmento (texto, familia, tamano, negrita, cursiva, subrayado, color)
+     en un `<span style="...">`; solo agrega las propiedades activas
+     (`font-weight:bold` únicamente si el fragmento está en negrita),
+     escapa `<`, `>` y `&`, convierte `\n` en `<br>` y pone el color como
+     `#rrggbb`.
+2. **`tests/test_formato_html.py` creado** (65 líneas) con las 4 pruebas que
+   pide el diseño, todas en verde:
+   - `test_escapa_caracteres_especiales`: `"<b>"` queda como `&lt;b&gt;`.
+   - `test_negrita_solo_en_su_span`: `font-weight:bold` aparece una sola
+     vez, solo en el fragmento en negrita.
+   - `test_salto_de_linea_se_convierte_en_br`: `"\n"` produce `<br>`.
+   - `test_carpeta_vacia_no_hay_tipografias_ni_css`: carpeta temporal vacía
+     → lista vacía y CSS `""`.
+   - El import va sin prefijo de paquete (`from formato_html import ...`,
+     igual que correrá el programa); como Pyright no ve la ruta que agrega
+     `conftest.py` en tiempo de ejecución, el archivo lleva
+     `# pyright: reportMissingImports=false` explicado en su docstring.
+3. **Pyright**: 39 errores, los mismos 39 de ruido conocido de
+   `app/main.py` que ya había antes de esta tarea; cero errores nuevos en
+   los archivos creados.
+4. **Pytest**: 4 pruebas, 4 en verde.
+
+**Resultado:** `app/formato_html.py` queda listo como módulo puro (sin
+ventanas): la Tarea 2 podrá usar `fragmentos_a_html` y `css_tipografias`
+para escribir texto con formato mixto en el PDF real. El programa en
+funcionamiento no cambió todavía (nada lo importa aún).
+
+**Pendiente:**
+- Tarea 2: `cabe_texto_con_formato` e `insertar_texto_con_formato` en
+  `app/formato_html.py`, usando `insert_htmlbox` con un `fitz.Archive` de
+  la carpeta de fuentes, y sus pruebas con un PDF en memoria.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se
+  borró nada sin permiso.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

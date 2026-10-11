@@ -1,1 +1,1 @@
-{ "venvPath": ".", "venv": "venv", "include": ["app", "tests"] }
+{ "venvPath": ".", "venv": "venv", "include": ["app", "tests"], "extraPaths": ["app"] }
