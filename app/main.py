@@ -43,7 +43,8 @@ from PySide6.QtGui import (
 from PySide6.QtCore import Qt, QRect, QSize, Signal, QTranslator, QLibraryInfo, QLocale
 
 from editor_texto import (
-    BarraFormato, EditorTextoInline, documento_a_fragmentos, tamano_pdf_a_editor,
+    BarraFormato, EditorTextoInline, calcular_altura_editor,
+    documento_a_fragmentos, tamano_pdf_a_editor,
 )
 from formato_html import (
     CARPETA_FUENTES_WINDOWS, cabe_texto_con_formato, css_tipografias,
@@ -732,16 +733,32 @@ class EditorPDF(QMainWindow):
         if self.documento is None:
             return
 
-        # Mientras hay una edicion de texto en linea abierta, los clics
-        # en la pagina no hacen nada (ni anotaciones, ni otra edicion).
-        if self.editor_texto_inline is not None:
-            return
-
         x0 = rect_pixeles.left() / self.zoom
         y0 = rect_pixeles.top() / self.zoom
         x1 = rect_pixeles.right() / self.zoom
         y1 = rect_pixeles.bottom() / self.zoom
         rect_pdf = fitz.Rect(x0, y0, x1, y1)
+
+        # Con una edicion de texto en linea abierta, el UNICO clic con
+        # efecto es sobre un parrafo (el mismo u otro): se intenta
+        # aceptar la edicion actual y abrir el editor en ese parrafo,
+        # como en Acrobat. Los demas clics no hacen nada.
+        if self.editor_texto_inline is not None:
+            if self.combo_herramienta.currentText() != "Editar contenido (texto e imagenes)":
+                return
+            punto = rect_pdf.tl + (rect_pdf.br - rect_pdf.tl) * 0.5
+            if self.encontrar_parrafo_en_punto(self.documento[numero_pagina], punto) is None:
+                return  # clic fuera de parrafos: no hace nada
+            if not self.aceptar_edicion_texto():
+                return  # no cabe: ya se aviso, seguimos en la edicion actual
+            # La pagina ya quedo redibujada con el texto aceptado: se
+            # vuelve a buscar el parrafo en el punto del clic (pudo
+            # moverse) y se abre el editor ahi.
+            parrafo = self.encontrar_parrafo_en_punto(self.documento[numero_pagina], punto)
+            if parrafo is None:
+                return
+            self.editar_parrafo_encontrado(numero_pagina, self.documento[numero_pagina], parrafo)
+            return
 
         # Si hay una accion esperando a que el usuario de clic en la pagina
         # (por ejemplo, "elige donde poner la imagen"), este es ESE clic:
@@ -1218,12 +1235,15 @@ class EditorPDF(QMainWindow):
     def editar_parrafo_encontrado(self, numero_pagina, pagina, parrafo):
         """
         Abre el cuadro editable EN LINEA sobre un parrafo YA detectado (la
-        busqueda del parrafo la hace editar_contenido_en_punto): un
-        EditorTextoInline encima del parrafo (hijo de su EtiquetaPDF, con
-        la geometria del parrafo multiplicada por el zoom) y una
-        BarraFormato NUEVA debajo de la barra principal. El texto del
-        PDF se escribe recien cuando el usuario da ACEPTAR; mientras
-        tanto, el documento sigue intacto.
+        busqueda del parrafo la hace editar_contenido_en_punto o el clic
+        en otro parrafo): un EditorTextoInline encima del parrafo (hijo
+        de su EtiquetaPDF, con la geometria del parrafo multiplicada por
+        el zoom) y una BarraFormato NUEVA debajo de la barra principal.
+        El fondo del cuadro es OPACO y del color real de la pagina (no se
+        ve el texto original debajo); el cuadro no tiene scrollbars y
+        crece hacia abajo conforme se escribe, hasta el espacio libre
+        debajo del parrafo. El texto del PDF se escribe recien cuando el
+        usuario da ACEPTAR; mientras tanto, el documento sigue intacto.
         """
         # Un solo editor a la vez: si ya habia una edicion abierta, se
         # cierra primero (sin tocar el documento).
@@ -1235,15 +1255,29 @@ class EditorPDF(QMainWindow):
 
         bbox = parrafo["bbox"]
 
+        # El editor crece entre la altura del parrafo original y el
+        # espacio libre debajo (si no hay texto despues, hasta el borde
+        # inferior de la pagina), todo en pixeles del visor.
+        _, espacio_abajo = self.calcular_espacio_disponible_vertical(pagina, bbox)
+        if espacio_abajo is None:
+            espacio_abajo = max(0.0, pagina.rect.height - bbox.y1)
+        altura_minima = bbox.height * self.zoom
+        altura_maxima = altura_minima + espacio_abajo * self.zoom
+
         # --- Cuadro editable encima del parrafo (hijo de su EtiquetaPDF) ---
         editor = EditorTextoInline(etiqueta)
         editor.setGeometry(
             int(bbox.x0 * self.zoom),
             int(bbox.y0 * self.zoom),
             max(1, int(bbox.width * self.zoom)),
-            max(1, int(bbox.height * self.zoom)),
+            max(1, int(altura_minima)),
         )
         editor.setPlainText(parrafo["texto"])
+
+        # Fondo OPACO con el color real de la pagina medido a los lados
+        # del parrafo (para que no se vea el texto original debajo).
+        color_fondo = self.muestrear_color_de_fondo(pagina, bbox)
+        editor.pintar_fondo(tuple(int(c * 255) for c in color_fondo))
 
         # Formato inicial del texto: la PRIMERA tipografia disponible (la
         # fuente original del PDF no se conserva, ver diseno), el tamano
@@ -1274,6 +1308,19 @@ class EditorPDF(QMainWindow):
 
         editor.aceptado.connect(self.aceptar_edicion_texto)
         editor.cancelado.connect(self.cancelar_edicion_texto)
+        # El editor crece hacia abajo cuando el texto crece (sin scrollbars)
+        editor.document().documentLayout().documentSizeChanged.connect(
+            self._ajustar_altura_editor
+        )
+        self.editor_texto_inline = editor
+        self.barra_formato = None
+        self.parrafo_editando = {
+            "pagina": numero_pagina,
+            "bbox": bbox,
+            "altura_minima": altura_minima,
+            "altura_maxima": altura_maxima,
+        }
+        self._ajustar_altura_editor()
         editor.show()
         editor.setFocus()
 
@@ -1284,9 +1331,29 @@ class EditorPDF(QMainWindow):
         self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, barra)
 
-        self.editor_texto_inline = editor
         self.barra_formato = barra
-        self.parrafo_editando = {"pagina": numero_pagina, "bbox": bbox}
+
+    def _ajustar_altura_editor(self):
+        """Hace crecer el editor hacia abajo conforme crece el texto.
+
+        La altura queda limitada por calcular_altura_editor entre la del
+        parrafo original (minima) y el parrafo mas el espacio libre
+        debajo (maxima), todo ya en pixeles del visor. Solo cambia la
+        altura; la posicion y el ancho se quedan iguales.
+        """
+        if self.editor_texto_inline is None or self.parrafo_editando is None:
+            return
+        editor = self.editor_texto_inline
+        altura_contenido = editor.document().size().height()
+        altura = calcular_altura_editor(
+            altura_contenido,
+            self.parrafo_editando["altura_minima"],
+            self.parrafo_editando["altura_maxima"],
+        )
+        geometria = editor.geometry()
+        editor.setGeometry(
+            geometria.x(), geometria.y(), geometria.width(), int(altura)
+        )
 
     def _dpi_logica(self):
         """DPI logico de la pantalla (96 si no hay pantalla, por ejemplo en pruebas)."""
@@ -1296,16 +1363,30 @@ class EditorPDF(QMainWindow):
         return 96.0
 
     def aceptar_edicion_texto(self):
-        """Escribe el texto del editor en el PDF (si cabe) y cierra la edicion."""
+        """Escribe el texto del editor en el PDF (si cabe) y cierra la edicion.
+
+        Devuelve True si escribio y cerro; False si no cabio (o hubo un
+        error) y la edicion sigue abierta. El rectangulo del PDF usa la
+        ALTURA FINAL del editor (que pudo crecer hacia abajo) convertida
+        a puntos PDF; el ancho es el del parrafo original.
+        """
         if self.editor_texto_inline is None or self.parrafo_editando is None:
-            return
+            return False
         if self.documento is None:
             self.cancelar_edicion_texto()
-            return
+            return False
 
         numero_pagina = self.parrafo_editando["pagina"]
         pagina = self.documento[numero_pagina]
         bbox = self.parrafo_editando["bbox"]
+
+        # El editor puede haber crecido hacia abajo: su altura final en
+        # pixeles, convertida a puntos PDF (1 punto PDF = zoom pixeles
+        # en el visor), es la del rectangulo donde se escribe el texto.
+        altura_editor_px = self.editor_texto_inline.geometry().height()
+        rect_destino = fitz.Rect(
+            bbox.x0, bbox.y0, bbox.x1, bbox.y0 + altura_editor_px / self.zoom
+        )
 
         # Fragmentos del editor -> HTML, con los tamanos ya en puntos PDF
         fragmentos = documento_a_fragmentos(
@@ -1323,17 +1404,18 @@ class EditorPDF(QMainWindow):
             archivo = fitz.Archive(CARPETA_FUENTES_WINDOWS)
 
         # PRIMERO probamos si cabe, en un documento temporal descartable,
-        # SIN tocar el documento real.
-        if not cabe_texto_con_formato(bbox, html, css, archivo):
+        # SIN tocar el documento real. Solo avisa cuando ya NO queda
+        # espacio libre debajo para crecer mas.
+        if not cabe_texto_con_formato(rect_destino, html, css, archivo):
             QMessageBox.warning(
                 self, "El texto no cabe en el cuadro",
-                "El texto no cabe en el espacio del parrafo original sin "
-                "reducir el tamano de letra. Reduce el tamano (en la barra "
-                "de formato) o divide el texto, y vuelve a intentar.\n\n"
+                "El texto no cabe ni usando todo el espacio libre debajo "
+                "del parrafo. Reduce el tamano de letra (en la barra de "
+                "formato) o divide el texto, y vuelve a intentar.\n\n"
                 "No se modifico el documento (tu texto original sigue "
                 "intacto) y el editor sigue abierto.",
             )
-            return
+            return False
 
         color_de_fondo = self.muestrear_color_de_fondo(pagina, bbox)
         try:
@@ -1341,15 +1423,17 @@ class EditorPDF(QMainWindow):
             pagina.add_redact_annot(bbox, fill=color_de_fondo)
             pagina.apply_redactions()
             pagina.clean_contents()  # evita referencias colgando tras editar
-            # ...y escribimos el HTML con formato mixto en ese mismo lugar.
-            insertar_texto_con_formato(pagina, bbox, html, css, archivo)
+            # ...y escribimos el HTML con formato mixto en ese lugar,
+            # con la altura en que quedo el editor.
+            insertar_texto_con_formato(pagina, rect_destino, html, css, archivo)
         except Exception as error:
             QMessageBox.critical(self, "Error al escribir el texto", str(error))
-            return
+            return False
 
         self.cerrar_edicion_texto()
         self.redibujar_pagina_individual(numero_pagina)
         self.refrescar_recuadros_pagina(numero_pagina)
+        return True
 
     def cancelar_edicion_texto(self):
         """Cierra el editor y la barra de formato SIN tocar el documento."""

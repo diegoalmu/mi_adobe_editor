@@ -11,8 +11,8 @@ from PySide6.QtGui import QColor, QKeyEvent, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import QApplication
 
 from editor_texto import (
-    BarraFormato, EditorTextoInline, documento_a_fragmentos,
-    tamano_editor_a_pdf, tamano_pdf_a_editor,
+    BarraFormato, EditorTextoInline, calcular_altura_editor,
+    documento_a_fragmentos, tamano_editor_a_pdf, tamano_pdf_a_editor,
 )
 from formato_html import CARPETA_FUENTES_WINDOWS, tipografias_disponibles
 
@@ -155,3 +155,14 @@ def test_tamano_pdf_y_editor_ida_y_vuelta():
 
     # A 96 DPI y zoom 1, 12 puntos PDF son 9 puntos de Qt (factor 0.75)
     assert abs(tamano_pdf_a_editor(12, 1.0, 96.0) - 9.0) < 1e-9
+
+
+def test_calcular_altura_editor_limita_entre_minima_y_maxima():
+    # El contenido comodo cabe entre los limites: se queda tal cual
+    assert calcular_altura_editor(50, 20, 100) == 50
+    # El contenido es mas chico que el parrafo original: no baja del piso
+    assert calcular_altura_editor(10, 20, 100) == 20
+    # El contenido pasa del espacio libre: se queda en el techo
+    assert calcular_altura_editor(200, 20, 100) == 100
+    # Si el techo quedo por debajo del piso (caso raro), gana el piso
+    assert calcular_altura_editor(200, 120, 100) == 120

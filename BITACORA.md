@@ -739,6 +739,100 @@ muestra a la escala del zoom, con ida y vuelta exacta.
 
 ---
 
+## Sesión 14 — 2026-10-11
+
+**Objetivo de la sesión:** Corrección de la Tarea 5 tras la validación
+visual de Diego: fondo opaco del editor con el color real de la página,
+sin barras de desplazamiento (el editor crece hacia abajo), cambio de
+párrafo como Acrobat (clic en otro párrafo acepta el actual y abre el
+nuevo) y pruebas de todo.
+
+**Actividades realizadas:**
+1. **Punto 1 — texto doble (fondo opaco):**
+   - `app/editor_texto.py`: docstring del módulo (líneas 5–18) y de la
+     clase (40–49) actualizados; `EditorTextoInline.__init__` (52–62)
+     ya no usa `rgba(..., 200)` sino blanco opaco por defecto, y tiene
+     el nuevo método `pintar_fondo(color_rgb)` (64–69) que pinta el
+     fondo opaco con una tupla rgb 0–255.
+   - `app/main.py`: en `editar_parrafo_encontrado` (1277–1280) se mide
+     el color con `muestrear_color_de_fondo(pagina, bbox)` y se pinta
+     con `editor.pintar_fondo(...)` (convertido de 0–1 a 0–255): el
+     cuadro se ve del mismo color que la página y no se ve el texto
+     original debajo.
+2. **Punto 2 — sin scrollbars, crece hacia abajo:**
+   - `app/editor_texto.py`: en `__init__` (55–58) las dos barras de
+     desplazamiento quedan siempre apagadas
+     (`Qt.ScrollBarPolicy.ScrollBarAlwaysOff`); nueva función pura
+     `calcular_altura_editor(altura_contenido, altura_minima,
+     altura_maxima)` (122–138) que devuelve el contenido sin bajar del
+     piso (parrafo original) ni pasar del techo (parrafo + espacio
+     libre).
+   - `app/main.py`: `editar_parrafo_encontrado` calcula
+     `altura_minima` = alto del párrafo × zoom y `altura_maxima` = esa
+     más `calcular_espacio_disponible_vertical` × zoom (si no hay texto
+     debajo, hasta `pagina.rect.height - bbox.y1`, líneas 1259–1265);
+     las guarda en `parrafo_editando` (1318–1322); conecta
+     `documentSizeChanged` a `_ajustar_altura_editor` (1310–1312), el
+     nuevo método (1336–1358) que recalculla la altura con
+     `calcular_altura_editor` y solo cambia la geometría del editor.
+     `aceptar_edicion_texto` (1365–1436) ahora usa un `rect_destino`
+     (1384–1389) con la altura final del editor en píxeles convertida
+     a puntos PDF (`altura_editor_px / self.zoom`); el aviso de "no
+     cabe" quedó solo para cuando ya no queda espacio libre (mensaje
+     actualizado, 1409–1418).
+3. **Punto 3 — cambio de párrafo como Acrobat:**
+   - `app/main.py`: `al_seleccionar_rectangulo` (732–773) ya no
+     bloquea los clics con la edición abierta: si hay editor y la
+     herramienta es "Editar contenido", un clic sobre un párrafo (el
+     mismo u otro) intenta `aceptar_edicion_texto()`; si devuelve
+     `True` (cabió), se rebusca el párrafo en el punto del clic (la
+     página ya se redibujó) y se abre ahí el editor; si devuelve
+     `False` (no cabe), el aviso ya salió y se sigue en la edición
+     actual. Clics fuera de párrafos u otras herramientas: no hacen
+     nada (749–755).
+   - `aceptar_edicion_texto` ahora devuelve `True`/`False` (True solo
+     al escribir y cerrar).
+4. **Punto 4 — pruebas:**
+   - `tests/test_editor_texto.py` (de 157 a 168 líneas):
+     `test_calcular_altura_editor_limita_entre_minima_y_maxima`
+     (líneas 161–168): contenido cómodo, piso, techo y techo<piso.
+   - `tests/test_edicion_inline.py` (de 140 a 193 líneas):
+     `test_clic_en_otro_parrafo_acepta_y_abre_el_nuevo` (143–193):
+     PDF con "parrafo A" y "parrafo B", edición de A con texto
+     cambiado, clic simulado en el centro de B vía
+     `al_seleccionar_rectangulo` con `QRect` en píxeles (y la
+     herramienta puesta en "Editar contenido"), verifica que "A
+     editado" quedó en el PDF y que el editor abierto es el de B
+     (`parrafo_editando["bbox"] == parrafo_b["bbox"]`). La aserción de
+     `parrafo_editando` del test de aceptar se ajustó a las 4 claves
+     nuevas (líneas 82–84).
+5. **Pyright**: 0 errores en `app/editor_texto.py` y los tests; los
+   mismos 38 de ruido conocido de `app/main.py` (enums Qt, `Document`
+   iterable, `PDF_ENCRYPT_AES_256`, `pixmap_limpio`).
+6. **Pytest**: 18 pruebas (3 de esta corrección + 15 previas), todas en
+   verde.
+
+**Resultado:** El editor en línea ya no muestra el texto original
+debajo (fondo opaco del color real de la página), no tiene scrollbars y
+crece hacia abajo conforme se escribe hasta el espacio libre (y al
+aceptar, el texto se escribe en el PDF con esa altura). Cambiar de
+párrafo funciona como en Acrobat: con una edición abierta, un clic en
+otro párrafo acepta el actual (si cabe) y abre el nuevo; si no cabe, se
+queda en el actual con el aviso.
+
+**Pendiente:**
+- Validación visual de Diego de esta corrección: fondo del cuadro igual
+  al de la página (títulos con color), editor creciendo al escribir
+  varias líneas (sin scrollbars), aviso solo al no tener espacio, y
+  clic en otro párrafo aceptando y abriendo el nuevo.
+- Tarea 6: limpiar `DialogoEditarCuadroDeTexto` y los métodos
+  `escribir_texto_en_punto` / `escribir_cuadro_de_texto_en_punto` que
+  quedaron sin llamadores.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no
+  se borró nada sin permiso.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

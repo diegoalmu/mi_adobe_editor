@@ -8,6 +8,7 @@ y comprueba que el PDF quedo cambiado y que la edicion se cerro sola.
 # pyright: reportMissingImports=false
 
 import fitz
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import QApplication
 
@@ -78,7 +79,9 @@ def test_editar_parrafo_en_linea_y_aceptar(tmp_path):
     ventana.editar_parrafo_encontrado(0, pagina, parrafo)
     assert ventana.editor_texto_inline is not None
     assert ventana.barra_formato is not None
-    assert ventana.parrafo_editando == {"pagina": 0, "bbox": parrafo["bbox"]}
+    assert ventana.parrafo_editando is not None
+    assert ventana.parrafo_editando["pagina"] == 0
+    assert ventana.parrafo_editando["bbox"] == parrafo["bbox"]
     assert ventana.editor_texto_inline.toPlainText() == "uno dos tres"
 
     # Poner "dos" en negrita con el boton de la barra de formato
@@ -136,5 +139,55 @@ def test_editar_parrafo_y_cancelar_no_toca_el_pdf(tmp_path):
     assert ventana.parrafo_editando is None
     assert str(pagina.get_text("text")) == texto_antes
 
+    ventana.documento.close()
+    ventana.close()
+
+
+def test_clic_en_otro_parrafo_acepta_y_abre_el_nuevo(tmp_path):
+    """Como en Acrobat: con la edicion de A abierta, un clic en B
+    acepta A (queda escrito en el PDF) y abre el editor en B."""
+    ruta = tmp_path / "dos_parrafos.pdf"
+    documento = fitz.open()
+    pagina = documento.new_page(width=595, height=842)
+    pagina.insert_text((72, 100), "parrafo A", fontsize=12, fontname="helv")
+    pagina.insert_text((72, 200), "parrafo B", fontsize=12, fontname="helv")
+    documento.save(str(ruta))
+    documento.close()
+
+    ventana = EditorPDF()
+    ventana.documento = fitz.open(str(ruta))
+    ventana.dibujar_todas_las_paginas()
+
+    pagina = ventana.documento[0]
+    parrafos = ventana.obtener_todos_los_parrafos(pagina)
+    assert len(parrafos) == 2
+    parrafo_a = parrafos[0]  # el de mas arriba
+    parrafo_b = parrafos[1]
+
+    # Abrir la edicion del parrafo A y cambiarle el texto
+    ventana.editar_parrafo_encontrado(0, pagina, parrafo_a)
+    assert ventana.editor_texto_inline is not None
+    ventana.editor_texto_inline.setPlainText("A editado")
+
+    # Simular un clic en el centro del parrafo B, por el flujo real:
+    # al_seleccionar_rectangulo recibe el rectangulo en PIXELES del
+    # visor (por eso se multiplica por el zoom). La herramienta debe
+    # seguir siendo "Editar contenido" (como en la app real).
+    ventana.combo_herramienta.setCurrentText("Editar contenido (texto e imagenes)")
+    centro_b = parrafo_b["bbox"]
+    punto_x = int(((centro_b.x0 + centro_b.x1) / 2) * ventana.zoom)
+    punto_y = int(((centro_b.y0 + centro_b.y1) / 2) * ventana.zoom)
+    ventana.al_seleccionar_rectangulo(0, QRect(punto_x, punto_y, 1, 1))
+
+    # El cambio de A quedo escrito en el PDF...
+    assert "A editado" in _texto_plano(ventana.documento[0])
+    # ...y hay un editor abierto ahora en el parrafo B
+    assert ventana.editor_texto_inline is not None
+    assert ventana.parrafo_editando is not None
+    assert ventana.editor_texto_inline.toPlainText() == "parrafo B"
+    assert ventana.parrafo_editando["pagina"] == 0
+    assert ventana.parrafo_editando["bbox"] == parrafo_b["bbox"]
+
+    ventana.cancelar_edicion_texto()
     ventana.documento.close()
     ventana.close()

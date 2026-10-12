@@ -3,14 +3,18 @@ editor_texto.py - Cuadro editable y barra de formato del editor inline
 ======================================================================
 
 Clase EditorTextoInline (un QTextEdit sin marco que se pone encima de un
-parrafo del PDF, con fondo blanco semitransparente), clase BarraFormato
-(el QToolBar con selector de tipografia y tamano, botones de Negrita,
-Cursiva y Subrayado, boton de color, Aceptar y Cancelar), la funcion
-documento_a_fragmentos, que convierte el contenido del QTextEdit en la
-lista de fragmentos que consume formato_html.fragmentos_a_html, y las
-funciones tamano_pdf_a_editor / tamano_editor_a_pdf, que convierten los
-tamanos de puntos PDF (los del documento) a puntos de letra de Qt (los
-del editor) segun el zoom del visor y el DPI logico de la pantalla.
+parrafo del PDF, con fondo opaco del mismo color que el de la pagina, y
+con las barras de desplazamiento siempre apagadas: crece hacia abajo
+conforme se escribe), clase BarraFormato (el QToolBar con selector de
+tipografia y tamano, botones de Negrita, Cursiva y Subrayado, boton de
+color, Aceptar y Cancelar), la funcion documento_a_fragmentos, que
+convierte el contenido del QTextEdit en la lista de fragmentos que
+consume formato_html.fragmentos_a_html, la funcion pura
+calcular_altura_editor, que limita la altura del editor entre el
+parrafo original y el espacio libre, y las funciones tamano_pdf_a_editor
+/ tamano_editor_a_pdf, que convierten los tamanos de puntos PDF (los
+del documento) a puntos de letra de Qt (los del editor) segun el zoom
+del visor y el DPI logico de la pantalla.
 
 El codigo usa nombres COMPLETOS de los enums de Qt (por ejemplo
 Qt.Key.Key_Escape o QFont.Weight.Bold) para que pyright no reporte
@@ -35,9 +39,13 @@ from formato_html import CARPETA_FUENTES_WINDOWS, tipografias_disponibles
 class EditorTextoInline(QTextEdit):
     """Cuadro editable que se coloca encima de un parrafo del PDF.
 
-    Sin marco y con fondo blanco semitransparente, para que se vea el
-    parrafo original debajo. Esc emite la senal `cancelado` y Ctrl+Enter
-    emite la senal `aceptado`.
+    Sin marco y con fondo OPACO del mismo color que el de la pagina
+    (lo pinta main.py con pintar_fondo, usando el color que
+    muestrear_color_de_fondo midio a los lados del parrafo); asi no se
+    ve el texto original debajo. Las barras de desplazamiento estan
+    siempre apagadas: el cuadro crece hacia abajo conforme se escribe
+    (la altura la calcula main.py con calcular_altura_editor). Esc
+    emite la senal `cancelado` y Ctrl+Enter emite la senal `aceptado`.
     """
 
     cancelado = Signal()
@@ -46,7 +54,20 @@ class EditorTextoInline(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setStyleSheet("background-color: rgba(255, 255, 255, 200);")
+        # Sin scrollbars: el editor crece, no se desplaza (se vera el
+        # texto completo mientras quepa en el espacio libre de abajo).
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Mientras no se pinte el fondo real de la pagina, blanco opaco
+        self.setStyleSheet("background-color: rgb(255, 255, 255);")
+
+    def pintar_fondo(self, color_rgb):
+        """Pinta el fondo del cuadro con el color dado (tupla rgb de 0 a 255)."""
+        self.setStyleSheet(
+            "background-color: rgb({}, {}, {});".format(
+                color_rgb[0], color_rgb[1], color_rgb[2]
+            )
+        )
 
     def keyPressEvent(self, evento):
         if evento.key() == Qt.Key.Key_Escape:
@@ -96,6 +117,25 @@ def tamano_editor_a_pdf(tamano_editor, zoom, dpi_logica):
     """Convierte un tamano en puntos de Qt a puntos PDF (ida y vuelta
     exacto con tamano_pdf_a_editor)."""
     return tamano_editor * dpi_logica / (zoom * 72.0)
+
+
+# =========================================================================
+# ALTURA DEL EDITOR (CRECE HACIA ABAJO, SIN SCROLLBARS)
+# =========================================================================
+
+def calcular_altura_editor(altura_contenido, altura_minima, altura_maxima):
+    """Devuelve la altura que debe tener el editor, en pixeles.
+
+    El editor crece hacia abajo conforme se escribe, pero nunca:
+
+    - baja de `altura_minima` (la del parrafo original), ni
+    - pasa de `altura_maxima` (el parrafo mas el espacio libre debajo;
+      si no hay texto despues, hasta el borde inferior de la pagina).
+
+    Si el espacio libre ya no alcanza para el texto (la maxima no
+    alcanza), queda en la maxima y main.py avisa al usuario.
+    """
+    return max(altura_minima, min(altura_contenido, altura_maxima))
 
 
 class BarraFormato(QToolBar):
