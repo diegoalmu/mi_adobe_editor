@@ -908,6 +908,57 @@ conocidas.
 
 ---
 
+## Sesión 16 — 2026-10-14
+
+**Objetivo de la sesión:** Tarea 1 del plan `DISENO_DESHACER.md`:
+crear `app/historial.py` con la clase `HistorialCambios` (pilas de
+copias en memoria para Deshacer/Rehacer), sus pruebas sin Qt, y
+apuntar `AGENTS.md` al plan nuevo.
+
+**Actividades realizadas:**
+
+1. **`app/historial.py` (nuevo, 165 líneas):** clase
+   `HistorialCambios(limite_pasos=20, limite_bytes=300 * 1024 * 1024)`
+   con dos pilas de tuplas `(bytes, descripcion)`; `registrar` guarda
+   `documento.tobytes()`, vacía la pila de Rehacer (regla 1) y aplica
+   los límites descartando las copias más antiguas;
+   `descartar_ultimo` quita la última copia para operaciones que
+   fallan o se cancelan (regla 4); `deshacer`/`rehacer` devuelven un
+   `fitz.Document` nuevo abierto desde la copia y meten el estado
+   actual en la pila contraria con la misma descripción (`None` si no
+   hay nada); consultas `puede_deshacer`, `puede_rehacer`,
+   `descripcion_deshacer`, `descripcion_rehacer` y `vaciar`. Sin Qt,
+   solo `import fitz`.
+2. **`tests/test_historial.py` (nuevo, 195 líneas):** las 6 pruebas
+   que pide el diseño, con helpers `_documento_texto` y
+   `_agregar_linea` (PDFs en memoria, sin QApplication): registrar 3
+   cambios y deshacer 3 veces regresa al original; un cambio nuevo
+   vacía el Rehacer; con `limite_pasos=2` al registrar 3 solo se
+   pueden deshacer 2; con `limite_bytes` pequeño se descartan las
+   copias antiguas; `descartar_ultimo` quita la copia del cambio
+   cancelado; descripciones correctas en las dos pilas (y `vaciar`).
+3. **`AGENTS.md` (línea 15):** "Plan vigente" pasa de
+   `DISENO_EDITOR_TEXTO.md` a `DISENO_DESHACER.md`.
+4. **Verificación:** **pyright** → mismos 38 ruidos conocidos de
+   `app/main.py` (enums Qt, `Document`, `PDF_ENCRYPT_AES_256`,
+   `pixmap_limpio`), 0 errores en `app/historial.py` y en
+   `tests/test_historial.py` (sin `reportMissingImports`:
+   `extraPaths` de `pyrightconfig.json` alcanza para el import de
+   `historial`); **pytest** → 24/24 en verde (las 6 nuevas incluidas).
+
+**Resultado:** El corazón del Deshacer/Rehacer queda listo y probado
+sin ventanas: copias completas del documento en memoria con límites
+de 20 pasos / 300 MB, y la API completa que la Tarea 2 conectará al
+menú Editar de `main.py`.
+
+**Pendiente:**
+- Tarea 2 del plan: menú "Editar" en `EditorPDF` con Deshacer
+  (`QKeySequence.StandardKey.Undo`) y Rehacer
+  (`QKeySequence.StandardKey.Redo`), descripciones en el menú,
+  restaurar el documento y redibujar.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
