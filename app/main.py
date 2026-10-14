@@ -1,4 +1,4 @@
-"""
+﻿"""
 Mi-Adobe-PDF - Editor de PDF de escritorio (Python + PySide6 + PyMuPDF)
 =======================================================================
 
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QScrollArea, QToolBar, QFileDialog,
     QMessageBox, QComboBox, QInputDialog, QLineEdit, QRubberBand, QStatusBar,
     QWidget, QVBoxLayout, QDialog, QListWidget, QListWidgetItem, QPushButton,
-    QHBoxLayout, QAbstractItemView, QTextEdit, QDoubleSpinBox, QCheckBox,
+    QHBoxLayout, QAbstractItemView, QDoubleSpinBox, QCheckBox,
     QColorDialog, QFormLayout,
 )
 from PySide6.QtGui import (
@@ -229,129 +229,6 @@ class DialogoPosicionarImagen(QDialog):
             "ancho": self.spin_ancho.value(),
             "alto": self.spin_alto.value(),
             "mantener_proporcion": self.check_proporcion.isChecked(),
-            "usar_clic": self.usar_clic,
-        }
-
-
-# =========================================================================
-# DIALOGO PARA EDITAR UN "CUADRO DE TEXTO" (texto que ya existia en el PDF)
-# =========================================================================
-
-class DialogoEditarCuadroDeTexto(QDialog):
-    """
-    Ventana tipo "cuadro de texto" de Adobe Acrobat: muestra el texto del
-    parrafo detectado y deja cambiar texto, tamano de letra, color,
-    negrita, cursiva, y el ancho/alto del cuadro (en puntos del PDF).
-    """
-
-    def __init__(self, texto, tamano, color_rgb_0_255, negrita, cursiva, x, y, ancho, alto, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Editar cuadro de texto")
-        self.resize(480, 460)
-        self.color_actual = QColor(*[int(c) for c in color_rgb_0_255])
-
-        layout_principal = QVBoxLayout(self)
-
-        layout_principal.addWidget(QLabel("Texto:"))
-        self.caja_texto = QTextEdit()
-        self.caja_texto.setPlainText(texto)
-        layout_principal.addWidget(self.caja_texto)
-
-        formulario = QFormLayout()
-
-        self.spin_tamano = QDoubleSpinBox()
-        self.spin_tamano.setRange(1, 300)
-        self.spin_tamano.setValue(tamano)
-        formulario.addRow("Tamano de letra:", self.spin_tamano)
-
-        self.boton_color = QPushButton()
-        self.actualizar_boton_color()
-        self.boton_color.clicked.connect(self.elegir_color)
-        formulario.addRow("Color del texto:", self.boton_color)
-
-        fila_estilo = QHBoxLayout()
-        self.check_negrita = QCheckBox("Negrita")
-        self.check_negrita.setChecked(negrita)
-        self.check_cursiva = QCheckBox("Cursiva")
-        self.check_cursiva.setChecked(cursiva)
-        fila_estilo.addWidget(self.check_negrita)
-        fila_estilo.addWidget(self.check_cursiva)
-        formulario.addRow("Estilo:", fila_estilo)
-
-        self.spin_x = QDoubleSpinBox()
-        self.spin_x.setRange(0, 5000)
-        self.spin_x.setValue(x)
-        formulario.addRow("Posicion X:", self.spin_x)
-
-        self.spin_y = QDoubleSpinBox()
-        self.spin_y.setRange(0, 5000)
-        self.spin_y.setValue(y)
-        formulario.addRow("Posicion Y:", self.spin_y)
-
-        self.spin_ancho = QDoubleSpinBox()
-        self.spin_ancho.setRange(10, 2000)
-        self.spin_ancho.setValue(ancho)
-        formulario.addRow("Ancho del cuadro (puntos):", self.spin_ancho)
-
-        self.spin_alto = QDoubleSpinBox()
-        self.spin_alto.setRange(10, 2000)
-        self.spin_alto.setValue(alto)
-        formulario.addRow("Alto del cuadro (puntos):", self.spin_alto)
-
-        layout_principal.addLayout(formulario)
-
-        self.usar_clic = False
-        boton_usar_clic = QPushButton("📍 Usar clic en la pagina (mas facil)")
-        boton_usar_clic.clicked.connect(self.al_elegir_con_clic)
-        layout_principal.addWidget(boton_usar_clic)
-
-        ayuda = QLabel(
-            "Tip: si el texto no cabe en el cuadro, agranda el ancho/alto o "
-            "reduce el tamano de letra. Si no quieres calcular la Posicion "
-            "X/Y a mano, usa el boton de arriba y luego da clic en la pagina "
-            "donde quieras que quede el texto."
-        )
-        ayuda.setWordWrap(True)
-        ayuda.setStyleSheet("color: #666; font-style: italic;")
-        layout_principal.addWidget(ayuda)
-
-        fila_botones = QHBoxLayout()
-        boton_cancelar = QPushButton("Cancelar")
-        boton_aceptar = QPushButton("Aplicar cambios")
-        boton_cancelar.clicked.connect(self.reject)
-        boton_aceptar.clicked.connect(self.accept)
-        fila_botones.addWidget(boton_cancelar)
-        fila_botones.addWidget(boton_aceptar)
-        layout_principal.addLayout(fila_botones)
-
-    def al_elegir_con_clic(self):
-        self.usar_clic = True
-        self.accept()
-
-    def actualizar_boton_color(self):
-        self.boton_color.setText(self.color_actual.name())
-        self.boton_color.setStyleSheet(
-            f"background-color: {self.color_actual.name()}; "
-            f"color: {'white' if self.color_actual.lightness() < 128 else 'black'};"
-        )
-
-    def elegir_color(self):
-        color_elegido = QColorDialog.getColor(self.color_actual, self, "Elige el color del texto")
-        if color_elegido.isValid():
-            self.color_actual = color_elegido
-            self.actualizar_boton_color()
-
-    def obtener_valores(self):
-        return {
-            "texto": self.caja_texto.toPlainText(),
-            "tamano": self.spin_tamano.value(),
-            "color": (self.color_actual.red(), self.color_actual.green(), self.color_actual.blue()),
-            "negrita": self.check_negrita.isChecked(),
-            "cursiva": self.check_cursiva.isChecked(),
-            "x": self.spin_x.value(),
-            "y": self.spin_y.value(),
-            "ancho": self.spin_ancho.value(),
-            "alto": self.spin_alto.value(),
             "usar_clic": self.usar_clic,
         }
 
@@ -1110,25 +987,6 @@ class EditorPDF(QMainWindow):
         except Exception:
             return (1, 1, 1)  # si algo falla, blanco es el valor seguro de siempre
 
-    def texto_cabe_en_cuadro(self, texto, rect, tamano, fuente):
-        """
-        Prueba si un texto cabe en un rectangulo dado, con cierto tamano y
-        fuente, PERO haciendolo en un documento PDF temporal descartable,
-        para no arriesgar el documento real del usuario. Devuelve True/False.
-        """
-        documento_prueba = fitz.open()
-        try:
-            pagina_prueba = documento_prueba.new_page(
-                width=max(rect.width, 10) + 20, height=max(rect.height, 10) + 20
-            )
-            rect_prueba = fitz.Rect(0, 0, rect.width, rect.height)
-            resultado = pagina_prueba.insert_textbox(
-                rect_prueba, texto, fontsize=tamano, fontname=fuente, align=0,
-            )
-            return resultado >= 0
-        finally:
-            documento_prueba.close()
-
     def calcular_espacio_disponible_vertical(self, pagina, bbox_objetivo):
         """
         Mide cuanto espacio libre hay ARRIBA y ABAJO de un bbox, antes de
@@ -1449,29 +1307,6 @@ class EditorPDF(QMainWindow):
             self.editor_texto_inline.deleteLater()
             self.editor_texto_inline = None
         self.parrafo_editando = None
-
-    def escribir_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color):
-        """Escribe una linea de texto en el punto donde el usuario dio clic."""
-        if self.documento is None:
-            return
-        pagina = self.documento[numero_pagina]
-        try:
-            pagina.insert_text((punto.x, punto.y), texto, fontsize=tamano, fontname=fuente, color=color)
-            self.redibujar_pagina_individual(numero_pagina)
-        except Exception as error:
-            QMessageBox.critical(self, "Error al colocar el texto", str(error))
-
-    def escribir_cuadro_de_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color, ancho, alto):
-        """Escribe un cuadro de texto (varias lineas) en el punto donde el usuario dio clic."""
-        if self.documento is None:
-            return
-        pagina = self.documento[numero_pagina]
-        try:
-            rect = fitz.Rect(punto.x, punto.y, punto.x + ancho, punto.y + alto)
-            pagina.insert_textbox(rect, texto, fontsize=tamano, fontname=fuente, color=color, align=0)
-            self.redibujar_pagina_individual(numero_pagina)
-        except Exception as error:
-            QMessageBox.critical(self, "Error al colocar el texto", str(error))
 
     def editar_imagen(self, pagina, imagen):
         """Muestra opciones para reemplazar o eliminar una imagen detectada."""

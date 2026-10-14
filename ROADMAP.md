@@ -26,11 +26,21 @@ Cada fase es una entrega funcional. No pasamos a la siguiente hasta que la actua
 ## Fase 4 — Edición de texto real (la parte difícil) ✅ (completado)
 - [x] Detectar bloques de texto existentes (se agrupan en "párrafos" leyendo las líneas reales)
 - [x] Editar el contenido de esos bloques (tapar lo viejo con el color de fondo y escribir lo nuevo)
-- [x] Cambiar tamaño y color del texto (elige tamaño, color, negrita y cursiva en el diálogo)
+- [x] Edición tipo Word en línea (plan `DISENO_EDITOR_TEXTO.md`, Tareas 0–6): clic sobre
+  el párrafo → cuadro editable encima + barra de formato con 5 tipografías, tamaño,
+  negrita/cursiva/subrayado y color; el formato se aplica por palabra y el texto se
+  escribe con `insert_htmlbox`. La ventana "Editar cuadro de texto" fue eliminada
+- [x] Cambiar tamaño y color del texto (ahora desde la barra de formato, no en un diálogo)
 - [x] Bonus: también edita **imágenes** (reemplazar/eliminar) y **formas de color** (recuadros de colores: azul = texto, verde = imagen, naranja = forma)
-- (Limitación técnica real: los PDFs no son documentos "de flujo" como Word,
-  así que la edición es por bloques/cajas de texto, sin reflujo de párrafos.
-  Funciona bien para cambios cortos: precios, fechas, nombres.)
+- **Limitaciones conocidas de la edición de texto:**
+  1. El texto no empuja a los párrafos de abajo; si no cabe en el espacio libre, el
+     programa avisa y el usuario reduce la letra o divide el texto. Funciona mejor
+     para cambios cortos: precios, fechas, nombres.
+  2. El espacio libre para crecer solo considera texto debajo del párrafo, no
+     imágenes ni dibujos.
+  3. Guardar, cerrar o cambiar el zoom con una edición abierta la descarta.
+  4. La fuente original del PDF no se conserva; se usa una de las 5 tipografías de
+     la lista (Arial, Times New Roman, Calibri, Verdana, Courier New).
 
 ## Fase 5 — Formularios (sin empezar)
 - Detectar campos de formulario existentes y rellenarlos

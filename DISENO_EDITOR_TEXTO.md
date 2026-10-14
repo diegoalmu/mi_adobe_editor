@@ -5,6 +5,11 @@
 > una prueba, y no queden piezas a medias (lección de la versión de
 > Antigravity, ver `BITACORA.md`).
 
+> **✅ Estado (2026-10-11): COMPLETADA.** Tareas 0–6 ejecutadas en las
+> Sesiones 7–14 de `BITACORA.md` y validadas visualmente por Diego
+> (Tarea 5 + correcciones de la Sesión 14; limpieza y documentación en
+> la Tarea 6).
+
 ## 🎯 Objetivo
 
 Reemplazar la ventana "Editar cuadro de texto" (que pide posición X/Y y
@@ -32,6 +37,16 @@ o Acrobat:
   parecido, no idéntico.
 - **Edición de imágenes y formas de color:** se quedan como están hoy.
 
+## ⚠️ Limitaciones conocidas (documentadas al completar)
+
+1. El texto no empuja a los párrafos de abajo; si no cabe en el espacio libre, el
+   programa avisa y el usuario reduce la letra o divide el texto.
+2. El espacio libre para crecer solo considera texto debajo del párrafo, no imágenes
+   ni dibujos.
+3. Guardar, cerrar o cambiar el zoom con una edición abierta la descarta.
+4. La fuente original del PDF no se conserva; se usa una de las 5 tipografías de la
+   lista (Arial, Times New Roman, Calibri, Verdana, Courier New).
+
 ## 🧱 Decisiones técnicas
 
 ### Escribir texto con formato mixto: `insert_htmlbox`
@@ -49,7 +64,7 @@ salto de línea automático.
   la función lo indica (primer valor devuelto negativo) y el programa
   avisa al usuario sin tocar el documento.
 - Antes de modificar el PDF real, se prueba en un **documento temporal
-  descartable** (mismo patrón que ya usa `texto_cabe_en_cuadro`).
+  descartable** (la prueba vive en `cabe_texto_con_formato`).
 
 ### Tipografías: lista corta incrustada desde Windows
 
@@ -119,7 +134,7 @@ Ninguna tarea se da por terminada sin estas tres cosas:
 
 ## 📋 Tareas (en orden, una por sesión de OpenCode)
 
-### Tarea 0 — Herramientas de desarrollo
+### Tarea 0 — Herramientas de desarrollo ✅
 
 - Crear `requirements-dev.txt` con `pytest` y `pyright` (solo para
   desarrollo; el programa no los necesita para funcionar).
@@ -129,7 +144,7 @@ Ninguna tarea se da por terminada sin estas tres cosas:
 - **Prueba:** `pytest -v` corre (aunque sea con 0 pruebas) sin error de
   configuración.
 
-### Tarea 1 — `app/formato_html.py`: tipografías y HTML
+### Tarea 1 — `app/formato_html.py`: tipografías y HTML ✅
 
 - Constante `TIPOGRAFIAS` con la tabla de arriba.
 - `CARPETA_FUENTES_WINDOWS = r"C:\Windows\Fonts"`.
@@ -144,7 +159,7 @@ Ninguna tarea se da por terminada sin estas tres cosas:
   span; `\n` produce `<br>`; con una carpeta vacía no hay tipografías
   disponibles y el CSS queda vacío.
 
-### Tarea 2 — Escribir en el PDF con formato
+### Tarea 2 — Escribir en el PDF con formato ✅
 
 - En `app/formato_html.py`:
   - `cabe_texto_con_formato(rect, html, css, archivo)` → prueba en un
@@ -159,7 +174,7 @@ Ninguna tarea se da por terminada sin estas tres cosas:
   cuadro pequeño devuelve `False` en `cabe_texto_con_formato` y no
   modifica el documento.
 
-### Tarea 3 — `app/editor_texto.py`: cuadro editable
+### Tarea 3 — `app/editor_texto.py`: cuadro editable ✅
 
 - Clase `EditorTextoInline(QTextEdit)`: sin marco, fondo blanco
   semitransparente, se coloca encima del párrafo según el zoom.
@@ -172,7 +187,7 @@ Ninguna tarea se da por terminada sin estas tres cosas:
   con `mergeCharFormat`, y verificar que `documento_a_fragmentos` devuelve
   "dos" con `negrita=True` y "uno"/"tres" con `negrita=False`.
 
-### Tarea 4 — `app/editor_texto.py`: barra de formato
+### Tarea 4 — `app/editor_texto.py`: barra de formato ✅
 
 - Clase `BarraFormato(QToolBar)` con: selector de tipografía (solo las
   disponibles), tamaño, botones activables de Negrita / Cursiva /
@@ -188,7 +203,7 @@ Ninguna tarea se da por terminada sin estas tres cosas:
   esa palabra quedó en negrita; mover el cursor a esa palabra y verificar
   que el botón Negrita queda marcado.
 
-### Tarea 5 — Conectar todo en `app/main.py` (👁️ validación visual)
+### Tarea 5 — Conectar todo en `app/main.py` (👁️ validación visual) ✅
 
 - En `editar_contenido_en_punto`, al dar clic en un párrafo: crear el
   `EditorTextoInline` encima del párrafo (con su texto, tamaño y color
@@ -209,7 +224,7 @@ Ninguna tarea se da por terminada sin estas tres cosas:
   poner una palabra en negrita y otra en otro color, cambiar tipografía,
   aceptar, guardar con "Guardar como" y abrir el resultado en el navegador.
 
-### Tarea 6 — Limpieza y documentación
+### Tarea 6 — Limpieza y documentación ✅
 
 - Solo después de que Diego valide la Tarea 5: eliminar
   `DialogoEditarCuadroDeTexto` y el código que solo usaba esa ventana

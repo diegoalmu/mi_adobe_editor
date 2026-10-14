@@ -833,6 +833,81 @@ queda en el actual con el aviso.
 
 ---
 
+## Sesión 15 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 6 del plan `DISENO_EDITOR_TEXTO.md`
+(limpieza y documentación), ya validada por Diego la Tarea 5 y su
+corrección. Reglas: buscar cada candidato en todo el proyecto antes de
+borrar, no tocar `DialogoPosicionarImagen` ni nada de imágenes/formas,
+y documentar el estado + limitaciones conocidas.
+
+**Actividades realizadas:**
+
+1. **Búsquedas previas (grep en `app/` y `tests/`, antes de borrar):**
+   - `DialogoEditarCuadroDeTexto`: solo la definición de la clase;
+     cero instanciaciones ni referencias en código (las únicas apariciones
+     eran en `BITACORA.md` y este documento de diseño, que son
+     documentación histórica).
+   - `texto_cabe_en_cuadro`: solo la definición; cero llamadas
+     (`self.texto_cabe_en_cuadro(` no aparece en ningún archivo `.py`).
+   - `escribir_texto_en_punto` / `escribir_cuadro_de_texto_en_punto`:
+     solo las definiciones; ningún llamador.
+   - `QTextEdit` en el import de `app/main.py`: su único uso era la
+     caja de texto del diálogo borrado.
+2. **Borrados en `app/main.py` (de 1939 a 1774 líneas, −165):**
+   - Cabecera de sección + clase `DialogoEditarCuadroDeTexto` completas
+     (antes líneas 236–358: 123 líneas con sus 7 métodos).
+   - `texto_cabe_en_cuadro` (antes 1113–1131: 19 líneas) — era el helper
+     de "¿cabe?" del flujo viejo; el flujo nuevo usa
+     `cabe_texto_con_formato` de `formato_html.py`.
+   - `escribir_texto_en_punto` y `escribir_cuadro_de_texto_en_punto`
+     (antes 1453–1474: 22 líneas) — escribes del diálogo eliminado.
+   - `QTextEdit` quitado del import de `PySide6.QtWidgets` (hoy línea
+     36 del bloque 32–38). El resto de imports (`QFormLayout`,
+     `QDoubleSpinBox`, `QCheckBox`, `QDialog`, `QColorDialog`, …) se
+     queda: siguen usados por `DialogoPosicionarImagen`,
+     `DialogoReordenarPaginas` y `editar_forma`.
+   - **No se tocó** `DialogoPosicionarImagen` (156–233) ni nada de
+     imágenes y formas.
+3. **Referencias rotas por el borrado (documentación viva):**
+   - `app/formato_html.py` docstring de `cabe_texto_con_formato` (hoy
+     líneas 157–158): dejó de citar a `texto_cabe_en_cuadro de main.py`.
+   - `DISENO_EDITOR_TEXTO.md` línea ~65: ídem, la frase ahora dice que
+     la prueba vive en `cabe_texto_con_formato`.
+   - `BITACORA.md` NO se modifica: es historial.
+4. **Documentación del estado y de las 4 limitaciones conocidas:**
+   - `README.md`: checklist actualizado (líneas 15–16: edición tipo
+     Word en línea), sección "Estado actual" (31–38) con la Tarea 0–6
+     completada, y nueva subsección "✏️ Limitaciones conocidas de la
+     edición de texto" (40–48) con las 4 limitaciones.
+   - `ROADMAP.md` Fase 4 (26–45): ítem nuevo de la edición en línea con
+     barra de formato + ventana vieja eliminada, y las 4 limitaciones
+     reemplazan la nota técnica anterior.
+   - `DISENO_EDITOR_TEXTO.md`: bloque de estado COMPLETADA (8–11),
+     nueva sección "⚠️ Limitaciones conocidas" (40–48), y encabezados
+     de Tarea 0 a Tarea 6 marcados con ✅ (137, 147, 162, 177, 190,
+     206, 227).
+5. **Verificación:** grep final en `app/` y `tests/` → cero referencias
+   a lo borrado; **pyright** → mismos 38 ruidos conocidos de
+   `app/main.py` (enums Qt, `Document`, `PDF_ENCRYPT_AES_256`), 0
+   errores nuevos y 0 en los demás archivos; **pytest** → 18/18 en
+   verde.
+
+**Resultado:** El plan `DISENO_EDITOR_TEXTO.md` queda COMPLETO (Tareas
+0–6). La ventana "Editar cuadro de texto" y sus helpers ya no existen:
+la única forma de editar texto es la edición en línea tipo Word;
+imágenes y formas siguen intactos. README, ROADMAP (Fase 4) y el
+documento de diseño reflejan el estado terminado y las 4 limitaciones
+conocidas.
+
+**Pendiente:**
+- Validación visual de Diego de la documentación (revisión de README,
+  ROADMAP Fase 4 y del documento de diseño).
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no
+  se borró nada sin permiso.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

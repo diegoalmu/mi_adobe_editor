@@ -12,7 +12,8 @@ Construir, paso a paso y documentando todo el proceso (para portafolio y evidenc
 un programa de escritorio (Windows y Linux) capaz de:
 
 - [x] Abrir y visualizar PDFs (zoom, scroll continuo tipo Adobe)
-- [x] Editar texto que YA EXISTE en el PDF (cambios cortos: precios, fechas, nombres)
+- [x] Editar texto que YA EXISTE en el PDF (edición tipo Word en línea: clic sobre el
+  párrafo → cuadro editable con barra de formato; ver [DISENO_EDITOR_TEXTO.md](DISENO_EDITOR_TEXTO.md))
 - [x] Agregar texto nuevo, formas, y firma por imagen
 - [x] Resaltar, subrayar, tachar
 - [ ] Comentar (notas tipo "sticky note")
@@ -29,8 +30,22 @@ un programa de escritorio (Windows y Linux) capaz de:
 ### 📍 Estado actual (octubre 2026)
 
 Fases 1 a 4 del [ROADMAP](ROADMAP.md) completadas y funcionando (visor, anotaciones,
-gestión de páginas y edición de contenido real). El programa ya está **empaquetado
+gestión de páginas y edición de contenido real). La **edición de texto tipo Word**
+está terminada y validada (plan [DISENO_EDITOR_TEXTO.md](DISENO_EDITOR_TEXTO.md),
+Tareas 0–6): clic sobre un párrafo → cuadro editable en línea con barra de formato
+(tipografía, tamaño, negrita/cursiva/subrayado, color), sin abrir ventanas. El
+programa ya está **empaquetado
 y probado como aplicación de escritorio en Linux** (ver [EMPAQUETADO.md](EMPAQUETADO.md)).
+
+#### ✏️ Limitaciones conocidas de la edición de texto
+
+1. El texto no empuja a los párrafos de abajo; si no cabe en el espacio libre, el
+   programa avisa y el usuario reduce la letra o divide el texto.
+2. El espacio libre para crecer solo considera texto debajo del párrafo, no imágenes
+   ni dibujos.
+3. Guardar, cerrar o cambiar el zoom con una edición abierta la descarta.
+4. La fuente original del PDF no se conserva; se usa una de las 5 tipografías de la
+   lista (Arial, Times New Roman, Calibri, Verdana, Courier New).
 
 Pendientes: formularios (Fase 5), notas "sticky note", redacción permanente,
 firma con certificado, exportar a Excel, generar el `.exe` de Windows, ícono

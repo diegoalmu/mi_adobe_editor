@@ -154,8 +154,8 @@ def fragmentos_a_html(fragmentos):
 def cabe_texto_con_formato(rect, html, css, archivo):
     """Prueba si el HTML cabe en el rectangulo dado, sin tocar el documento real.
 
-    Se prueba en un documento PDF temporal descartable (mismo patron que
-    texto_cabe_en_cuadro de main.py) con insert_htmlbox(..., scale_low=1),
+    Se prueba en un documento PDF temporal descartable con
+    insert_htmlbox(..., scale_low=1),
     lo que significa que el texto NUNCA se reduce para que quepa: si no
     cabe, insert_htmlbox devuelve una holgura negativa y aqui se responde
     False. Devuelve True/False.
