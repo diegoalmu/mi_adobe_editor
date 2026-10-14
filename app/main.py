@@ -1,4 +1,4 @@
-"""
+﻿"""
 Mi-Adobe-PDF - Editor de PDF de escritorio (Python + PySide6 + PyMuPDF)
 =======================================================================
 
@@ -33,11 +33,23 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QScrollArea, QToolBar, QFileDialog,
     QMessageBox, QComboBox, QInputDialog, QLineEdit, QRubberBand, QStatusBar,
     QWidget, QVBoxLayout, QDialog, QListWidget, QListWidgetItem, QPushButton,
-    QHBoxLayout, QAbstractItemView, QTextEdit, QDoubleSpinBox, QCheckBox,
+    QHBoxLayout, QAbstractItemView, QDoubleSpinBox, QCheckBox,
     QColorDialog, QFormLayout,
 )
-from PySide6.QtGui import QPixmap, QImage, QAction, QIcon, QColor, QPainter, QPen
+from PySide6.QtGui import (
+    QPixmap, QImage, QAction, QIcon, QColor, QPainter, QPen,
+    QFont, QTextCharFormat, QTextCursor,
+)
 from PySide6.QtCore import Qt, QRect, QSize, Signal, QTranslator, QLibraryInfo, QLocale
+
+from editor_texto import (
+    BarraFormato, EditorTextoInline, calcular_altura_editor,
+    documento_a_fragmentos, tamano_pdf_a_editor,
+)
+from formato_html import (
+    CARPETA_FUENTES_WINDOWS, cabe_texto_con_formato, css_tipografias,
+    fragmentos_a_html, insertar_texto_con_formato, tipografias_disponibles,
+)
 
 
 # =========================================================================
@@ -221,129 +233,6 @@ class DialogoPosicionarImagen(QDialog):
         }
 
 
-# =========================================================================
-# DIALOGO PARA EDITAR UN "CUADRO DE TEXTO" (texto que ya existia en el PDF)
-# =========================================================================
-
-class DialogoEditarCuadroDeTexto(QDialog):
-    """
-    Ventana tipo "cuadro de texto" de Adobe Acrobat: muestra el texto del
-    parrafo detectado y deja cambiar texto, tamano de letra, color,
-    negrita, cursiva, y el ancho/alto del cuadro (en puntos del PDF).
-    """
-
-    def __init__(self, texto, tamano, color_rgb_0_255, negrita, cursiva, x, y, ancho, alto, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Editar cuadro de texto")
-        self.resize(480, 460)
-        self.color_actual = QColor(*[int(c) for c in color_rgb_0_255])
-
-        layout_principal = QVBoxLayout(self)
-
-        layout_principal.addWidget(QLabel("Texto:"))
-        self.caja_texto = QTextEdit()
-        self.caja_texto.setPlainText(texto)
-        layout_principal.addWidget(self.caja_texto)
-
-        formulario = QFormLayout()
-
-        self.spin_tamano = QDoubleSpinBox()
-        self.spin_tamano.setRange(1, 300)
-        self.spin_tamano.setValue(tamano)
-        formulario.addRow("Tamano de letra:", self.spin_tamano)
-
-        self.boton_color = QPushButton()
-        self.actualizar_boton_color()
-        self.boton_color.clicked.connect(self.elegir_color)
-        formulario.addRow("Color del texto:", self.boton_color)
-
-        fila_estilo = QHBoxLayout()
-        self.check_negrita = QCheckBox("Negrita")
-        self.check_negrita.setChecked(negrita)
-        self.check_cursiva = QCheckBox("Cursiva")
-        self.check_cursiva.setChecked(cursiva)
-        fila_estilo.addWidget(self.check_negrita)
-        fila_estilo.addWidget(self.check_cursiva)
-        formulario.addRow("Estilo:", fila_estilo)
-
-        self.spin_x = QDoubleSpinBox()
-        self.spin_x.setRange(0, 5000)
-        self.spin_x.setValue(x)
-        formulario.addRow("Posicion X:", self.spin_x)
-
-        self.spin_y = QDoubleSpinBox()
-        self.spin_y.setRange(0, 5000)
-        self.spin_y.setValue(y)
-        formulario.addRow("Posicion Y:", self.spin_y)
-
-        self.spin_ancho = QDoubleSpinBox()
-        self.spin_ancho.setRange(10, 2000)
-        self.spin_ancho.setValue(ancho)
-        formulario.addRow("Ancho del cuadro (puntos):", self.spin_ancho)
-
-        self.spin_alto = QDoubleSpinBox()
-        self.spin_alto.setRange(10, 2000)
-        self.spin_alto.setValue(alto)
-        formulario.addRow("Alto del cuadro (puntos):", self.spin_alto)
-
-        layout_principal.addLayout(formulario)
-
-        self.usar_clic = False
-        boton_usar_clic = QPushButton("📍 Usar clic en la pagina (mas facil)")
-        boton_usar_clic.clicked.connect(self.al_elegir_con_clic)
-        layout_principal.addWidget(boton_usar_clic)
-
-        ayuda = QLabel(
-            "Tip: si el texto no cabe en el cuadro, agranda el ancho/alto o "
-            "reduce el tamano de letra. Si no quieres calcular la Posicion "
-            "X/Y a mano, usa el boton de arriba y luego da clic en la pagina "
-            "donde quieras que quede el texto."
-        )
-        ayuda.setWordWrap(True)
-        ayuda.setStyleSheet("color: #666; font-style: italic;")
-        layout_principal.addWidget(ayuda)
-
-        fila_botones = QHBoxLayout()
-        boton_cancelar = QPushButton("Cancelar")
-        boton_aceptar = QPushButton("Aplicar cambios")
-        boton_cancelar.clicked.connect(self.reject)
-        boton_aceptar.clicked.connect(self.accept)
-        fila_botones.addWidget(boton_cancelar)
-        fila_botones.addWidget(boton_aceptar)
-        layout_principal.addLayout(fila_botones)
-
-    def al_elegir_con_clic(self):
-        self.usar_clic = True
-        self.accept()
-
-    def actualizar_boton_color(self):
-        self.boton_color.setText(self.color_actual.name())
-        self.boton_color.setStyleSheet(
-            f"background-color: {self.color_actual.name()}; "
-            f"color: {'white' if self.color_actual.lightness() < 128 else 'black'};"
-        )
-
-    def elegir_color(self):
-        color_elegido = QColorDialog.getColor(self.color_actual, self, "Elige el color del texto")
-        if color_elegido.isValid():
-            self.color_actual = color_elegido
-            self.actualizar_boton_color()
-
-    def obtener_valores(self):
-        return {
-            "texto": self.caja_texto.toPlainText(),
-            "tamano": self.spin_tamano.value(),
-            "color": (self.color_actual.red(), self.color_actual.green(), self.color_actual.blue()),
-            "negrita": self.check_negrita.isChecked(),
-            "cursiva": self.check_cursiva.isChecked(),
-            "x": self.spin_x.value(),
-            "y": self.spin_y.value(),
-            "ancho": self.spin_ancho.value(),
-            "alto": self.spin_alto.value(),
-            "usar_clic": self.usar_clic,
-        }
-
-
 ESPACIO_ENTRE_PAGINAS = 15  # pixeles de separacion visual entre una pagina y la siguiente
 
 
@@ -425,6 +314,13 @@ class EditorPDF(QMainWindow):
         self.pagina_actual = 0          # pagina que se considera "visible" ahora mismo
         self.etiquetas_paginas = []      # lista de EtiquetaPDF, una por pagina
         self.offsets_top = []            # posicion vertical (en pixeles) donde empieza cada pagina
+
+        # Edicion de texto en linea sobre un parrafo (herramienta "Editar
+        # contenido"): si editor_texto_inline no es None, hay una edicion
+        # activa y los demas controles no deben tocar la pagina.
+        self.editor_texto_inline = None  # EditorTextoInline encima del parrafo
+        self.barra_formato = None        # BarraFormato debajo de la barra principal
+        self.parrafo_editando = None     # {"pagina": int, "bbox": fitz.Rect} del parrafo activo
 
         self.setWindowTitle("Mi Adobe PDF")
         self.resize(1100, 850)
@@ -604,9 +500,16 @@ class EditorPDF(QMainWindow):
     def dibujar_todas_las_paginas(self):
         """Borra lo que hubiera dibujado y vuelve a crear una EtiquetaPDF por cada pagina."""
 
+        # Redibujar destruye las etiquetas: si hay una edicion de texto en
+        # linea encima de una pagina, se cancela ANTES (el documento no se
+        # toco, hasta que el usuario de ACEPTAR).
+        self.cancelar_edicion_texto()
+
         # Limpiar el contenedor
         while self.layout_paginas.count():
             item = self.layout_paginas.takeAt(0)
+            if item is None:
+                break
             widget = item.widget()
             if widget:
                 widget.deleteLater()
@@ -687,12 +590,14 @@ class EditorPDF(QMainWindow):
         self.actualizar_indicador_pagina()
 
     def zoom_mas(self):
+        self.cancelar_edicion_texto()  # cambiar el zoom redibuja todo
         self.zoom += 0.2
         self.dibujar_todas_las_paginas()
         self.ir_a_pagina(self.pagina_actual)
 
     def zoom_menos(self):
         if self.zoom > 0.4:
+            self.cancelar_edicion_texto()  # cambiar el zoom redibuja todo
             self.zoom -= 0.2
             self.dibujar_todas_las_paginas()
             self.ir_a_pagina(self.pagina_actual)
@@ -710,6 +615,27 @@ class EditorPDF(QMainWindow):
         x1 = rect_pixeles.right() / self.zoom
         y1 = rect_pixeles.bottom() / self.zoom
         rect_pdf = fitz.Rect(x0, y0, x1, y1)
+
+        # Con una edicion de texto en linea abierta, el UNICO clic con
+        # efecto es sobre un parrafo (el mismo u otro): se intenta
+        # aceptar la edicion actual y abrir el editor en ese parrafo,
+        # como en Acrobat. Los demas clics no hacen nada.
+        if self.editor_texto_inline is not None:
+            if self.combo_herramienta.currentText() != "Editar contenido (texto e imagenes)":
+                return
+            punto = rect_pdf.tl + (rect_pdf.br - rect_pdf.tl) * 0.5
+            if self.encontrar_parrafo_en_punto(self.documento[numero_pagina], punto) is None:
+                return  # clic fuera de parrafos: no hace nada
+            if not self.aceptar_edicion_texto():
+                return  # no cabe: ya se aviso, seguimos en la edicion actual
+            # La pagina ya quedo redibujada con el texto aceptado: se
+            # vuelve a buscar el parrafo en el punto del clic (pudo
+            # moverse) y se abre el editor ahi.
+            parrafo = self.encontrar_parrafo_en_punto(self.documento[numero_pagina], punto)
+            if parrafo is None:
+                return
+            self.editar_parrafo_encontrado(numero_pagina, self.documento[numero_pagina], parrafo)
+            return
 
         # Si hay una accion esperando a que el usuario de clic en la pagina
         # (por ejemplo, "elige donde poner la imagen"), este es ESE clic:
@@ -753,24 +679,20 @@ class EditorPDF(QMainWindow):
                     return
                 pagina.insert_image(rect_pdf, filename=self.ruta_firma)
             elif herramienta == "Editar contenido (texto e imagenes)":
-                self.editar_contenido_en_punto(pagina, rect_pdf)
+                self.editar_contenido_en_punto(numero_pagina, pagina, rect_pdf)
 
             # Solo hace falta re-dibujar la pagina afectada, no todas (mas rapido)
             self.redibujar_pagina_individual(numero_pagina)
 
             # Si seguimos en modo "Editar contenido (texto e imagenes)", refrescamos los
-            # recuadros azules de ESA pagina (las posiciones pudieron cambiar).
-            if herramienta == "Editar contenido (texto e imagenes)":
-                etiqueta = self.etiquetas_paginas[numero_pagina]
-                if etiqueta is not None and etiqueta.pixmap_limpio is not None:
-                    parrafos = self.obtener_todos_los_parrafos(pagina)
-                    imagenes = self.obtener_todas_las_imagenes(pagina)
-                    formas = self.obtener_formas_de_color(pagina)
-                    etiqueta.setPixmap(self.dibujar_cajas_de_texto(etiqueta.pixmap_limpio, parrafos, imagenes, formas))
+            # recuadros de ESA pagina (las posiciones pudieron cambiar).
+            self.refrescar_recuadros_pagina(numero_pagina)
         except Exception as error:
             QMessageBox.critical(self, "No se pudo agregar la anotacion", str(error))
 
     def redibujar_pagina_individual(self, numero_pagina):
+        if self.documento is None:
+            return
         etiqueta_objetivo = self.etiquetas_paginas[numero_pagina]
         if etiqueta_objetivo is None:
             return  # esta pagina tuvo un error al dibujarse originalmente, no hay donde redibujar
@@ -787,6 +709,27 @@ class EditorPDF(QMainWindow):
             etiqueta_objetivo.setPixmap(pixmap_qt)
         except Exception as error:
             QMessageBox.warning(self, "No se pudo actualizar la vista", str(error))
+
+    def refrescar_recuadros_pagina(self, numero_pagina):
+        """Vuelve a dibujar los recuadros de texto/imagen/forma de ESA pagina.
+
+        Solo aplica si la herramienta activa sigue siendo "Editar
+        contenido"; si no, no hace nada.
+        """
+        if self.documento is None:
+            return
+        if self.combo_herramienta.currentText() != "Editar contenido (texto e imagenes)":
+            return
+        etiqueta = self.etiquetas_paginas[numero_pagina]
+        if etiqueta is None or etiqueta.pixmap_limpio is None:
+            return
+        pagina = self.documento[numero_pagina]
+        parrafos = self.obtener_todos_los_parrafos(pagina)
+        imagenes = self.obtener_todas_las_imagenes(pagina)
+        formas = self.obtener_formas_de_color(pagina)
+        etiqueta.setPixmap(
+            self.dibujar_cajas_de_texto(etiqueta.pixmap_limpio, parrafos, imagenes, formas)
+        )
 
     # ---------------------------------------------------------------
     # PAGINAS (rotar/eliminar/insertar actuan sobre self.pagina_actual,
@@ -1044,25 +987,6 @@ class EditorPDF(QMainWindow):
         except Exception:
             return (1, 1, 1)  # si algo falla, blanco es el valor seguro de siempre
 
-    def texto_cabe_en_cuadro(self, texto, rect, tamano, fuente):
-        """
-        Prueba si un texto cabe en un rectangulo dado, con cierto tamano y
-        fuente, PERO haciendolo en un documento PDF temporal descartable,
-        para no arriesgar el documento real del usuario. Devuelve True/False.
-        """
-        documento_prueba = fitz.open()
-        try:
-            pagina_prueba = documento_prueba.new_page(
-                width=max(rect.width, 10) + 20, height=max(rect.height, 10) + 20
-            )
-            rect_prueba = fitz.Rect(0, 0, rect.width, rect.height)
-            resultado = pagina_prueba.insert_textbox(
-                rect_prueba, texto, fontsize=tamano, fontname=fuente, align=0,
-            )
-            return resultado >= 0
-        finally:
-            documento_prueba.close()
-
     def calcular_espacio_disponible_vertical(self, pagina, bbox_objetivo):
         """
         Mide cuanto espacio libre hay ARRIBA y ABAJO de un bbox, antes de
@@ -1084,7 +1008,7 @@ class EditorPDF(QMainWindow):
                     espacio_abajo = hueco
         return espacio_arriba, espacio_abajo
 
-    def editar_contenido_en_punto(self, pagina, rect_pdf):
+    def editar_contenido_en_punto(self, numero_pagina, pagina, rect_pdf):
         """
         Punto de entrada unico para la herramienta "Editar contenido": decide
         si el clic cayo sobre una IMAGEN, un PARRAFO DE TEXTO, o una FORMA/
@@ -1100,7 +1024,7 @@ class EditorPDF(QMainWindow):
 
         parrafo = self.encontrar_parrafo_en_punto(pagina, punto)
         if parrafo is not None:
-            self.editar_parrafo_encontrado(pagina, parrafo)
+            self.editar_parrafo_encontrado(numero_pagina, pagina, parrafo)
             return
 
         for forma in self.obtener_formas_de_color(pagina):
@@ -1166,151 +1090,223 @@ class EditorPDF(QMainWindow):
         except Exception as error:
             QMessageBox.critical(self, "Error al cambiar el color", str(error))
 
-    def editar_parrafo_encontrado(self, pagina, parrafo):
+    def editar_parrafo_encontrado(self, numero_pagina, pagina, parrafo):
         """
-        Abre la ventana de "cuadro de texto" para un parrafo YA detectado
-        (la busqueda del parrafo la hace editar_contenido_en_punto).
+        Abre el cuadro editable EN LINEA sobre un parrafo YA detectado (la
+        busqueda del parrafo la hace editar_contenido_en_punto o el clic
+        en otro parrafo): un EditorTextoInline encima del parrafo (hijo
+        de su EtiquetaPDF, con la geometria del parrafo multiplicada por
+        el zoom) y una BarraFormato NUEVA debajo de la barra principal.
+        El fondo del cuadro es OPACO y del color real de la pagina (no se
+        ve el texto original debajo); el cuadro no tiene scrollbars y
+        crece hacia abajo conforme se escribe, hasta el espacio libre
+        debajo del parrafo. El texto del PDF se escribe recien cuando el
+        usuario da ACEPTAR; mientras tanto, el documento sigue intacto.
         """
-        bbox_detectado = parrafo["bbox"]
-        es_una_sola_linea = parrafo["num_lineas"] == 1
+        # Un solo editor a la vez: si ya habia una edicion abierta, se
+        # cierra primero (sin tocar el documento).
+        self.cancelar_edicion_texto()
 
-        if es_una_sola_linea:
-            # CASO MAS SEGURO (fichas tecnicas, etiquetas, precios, una sola
-            # linea de texto): en vez de "adivinar" un cuadro con margen,
-            # usamos el punto EXACTO donde ya estaba dibujada esa linea
-            # (PyMuPDF lo guarda como "origen"). Asi no hace falta invadir
-            # el espacio de las lineas vecinas para nada.
-            bbox_real = bbox_detectado
-        else:
-            # Parrafos de VARIAS lineas (texto corrido): aqui si hace falta
-            # un poco de margen vertical para que insert_textbox pueda
-            # re-acomodar el texto, pero SOLO hasta donde haya espacio
-            # libre real (nunca invadimos la linea de arriba/abajo).
-            espacio_arriba, espacio_abajo = self.calcular_espacio_disponible_vertical(pagina, bbox_detectado)
-            margen_deseado = bbox_detectado.height * 0.15 + 2
-            margen_arriba = max(0, min(margen_deseado, (espacio_arriba - 1.5) if espacio_arriba is not None else margen_deseado))
-            margen_abajo = max(0, min(margen_deseado, (espacio_abajo - 1.5) if espacio_abajo is not None else margen_deseado))
-            bbox_real = fitz.Rect(
-                bbox_detectado.x0 - 2, bbox_detectado.y0 - margen_arriba,
-                bbox_detectado.x1 + 6, bbox_detectado.y1 + margen_abajo,
-            )
+        etiqueta = self.etiquetas_paginas[numero_pagina]
+        if etiqueta is None:
+            return  # esta pagina tuvo un error al dibujarse originalmente
 
-        texto_actual = parrafo["texto"]
-        tamano_actual = parrafo["size"]
+        bbox = parrafo["bbox"]
+
+        # El editor crece entre la altura del parrafo original y el
+        # espacio libre debajo (si no hay texto despues, hasta el borde
+        # inferior de la pagina), todo en pixeles del visor.
+        _, espacio_abajo = self.calcular_espacio_disponible_vertical(pagina, bbox)
+        if espacio_abajo is None:
+            espacio_abajo = max(0.0, pagina.rect.height - bbox.y1)
+        altura_minima = bbox.height * self.zoom
+        altura_maxima = altura_minima + espacio_abajo * self.zoom
+
+        # --- Cuadro editable encima del parrafo (hijo de su EtiquetaPDF) ---
+        editor = EditorTextoInline(etiqueta)
+        editor.setGeometry(
+            int(bbox.x0 * self.zoom),
+            int(bbox.y0 * self.zoom),
+            max(1, int(bbox.width * self.zoom)),
+            max(1, int(altura_minima)),
+        )
+        editor.setPlainText(parrafo["texto"])
+
+        # Fondo OPACO con el color real de la pagina medido a los lados
+        # del parrafo (para que no se vea el texto original debajo).
+        color_fondo = self.muestrear_color_de_fondo(pagina, bbox)
+        editor.pintar_fondo(tuple(int(c * 255) for c in color_fondo))
+
+        # Formato inicial del texto: la PRIMERA tipografia disponible (la
+        # fuente original del PDF no se conserva, ver diseno), el tamano
+        # del parrafo convertido a puntos del editor, el color del texto,
+        # y negrita/cursiva segun la fuente original.
+        disponibles = tipografias_disponibles(CARPETA_FUENTES_WINDOWS)
+        familia_inicial = disponibles[0] if disponibles else "Arial"
         codigo_color = parrafo["color"]
-        color_actual = (
+        color_texto = QColor(
             (codigo_color >> 16) & 255, (codigo_color >> 8) & 255, codigo_color & 255,
         )
         nombre_fuente = parrafo["font"].lower()
-        negrita_actual = "bold" in nombre_fuente
-        cursiva_actual = "italic" in nombre_fuente or "oblique" in nombre_fuente
-
-        dialogo = DialogoEditarCuadroDeTexto(
-            texto_actual, tamano_actual, color_actual, negrita_actual, cursiva_actual,
-            parrafo["origen"][0] if es_una_sola_linea else bbox_real.x0,
-            parrafo["origen"][1] if es_una_sola_linea else bbox_real.y0,
-            bbox_real.width, bbox_real.height, parent=self,
+        formato_inicial = QTextCharFormat()
+        formato_inicial.setFontFamilies([familia_inicial])
+        formato_inicial.setFontPointSize(
+            tamano_pdf_a_editor(parrafo["size"], self.zoom, self._dpi_logica())
         )
-        if dialogo.exec() != QDialog.Accepted:
+        formato_inicial.setFontWeight(
+            QFont.Weight.Bold if "bold" in nombre_fuente else QFont.Weight.Normal
+        )
+        formato_inicial.setFontItalic(
+            "italic" in nombre_fuente or "oblique" in nombre_fuente
+        )
+        formato_inicial.setForeground(color_texto)
+        cursor = editor.textCursor()
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.setCharFormat(formato_inicial)
+
+        editor.aceptado.connect(self.aceptar_edicion_texto)
+        editor.cancelado.connect(self.cancelar_edicion_texto)
+        # El editor crece hacia abajo cuando el texto crece (sin scrollbars)
+        editor.document().documentLayout().documentSizeChanged.connect(
+            self._ajustar_altura_editor
+        )
+        self.editor_texto_inline = editor
+        self.barra_formato = None
+        self.parrafo_editando = {
+            "pagina": numero_pagina,
+            "bbox": bbox,
+            "altura_minima": altura_minima,
+            "altura_maxima": altura_maxima,
+        }
+        self._ajustar_altura_editor()
+        editor.show()
+        editor.setFocus()
+
+        # --- Barra de formato NUEVA, debajo de la barra principal ---
+        barra = BarraFormato(editor, zoom=self.zoom, dpi_logica=self._dpi_logica())
+        barra.aceptar.connect(self.aceptar_edicion_texto)
+        barra.cancelar.connect(self.cancelar_edicion_texto)
+        self.addToolBarBreak(Qt.ToolBarArea.TopToolBarArea)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, barra)
+
+        self.barra_formato = barra
+
+    def _ajustar_altura_editor(self):
+        """Hace crecer el editor hacia abajo conforme crece el texto.
+
+        La altura queda limitada por calcular_altura_editor entre la del
+        parrafo original (minima) y el parrafo mas el espacio libre
+        debajo (maxima), todo ya en pixeles del visor. Solo cambia la
+        altura; la posicion y el ancho se quedan iguales.
+        """
+        if self.editor_texto_inline is None or self.parrafo_editando is None:
             return
+        editor = self.editor_texto_inline
+        altura_contenido = editor.document().size().height()
+        altura = calcular_altura_editor(
+            altura_contenido,
+            self.parrafo_editando["altura_minima"],
+            self.parrafo_editando["altura_maxima"],
+        )
+        geometria = editor.geometry()
+        editor.setGeometry(
+            geometria.x(), geometria.y(), geometria.width(), int(altura)
+        )
 
-        datos = dialogo.obtener_valores()
+    def _dpi_logica(self):
+        """DPI logico de la pantalla (96 si no hay pantalla, por ejemplo en pruebas)."""
+        pantalla = QApplication.primaryScreen()
+        if pantalla is not None:
+            return float(pantalla.logicalDotsPerInch())
+        return 96.0
 
-        if datos["negrita"] and datos["cursiva"]:
-            fuente = "hebi"
-        elif datos["negrita"]:
-            fuente = "hebo"
-        elif datos["cursiva"]:
-            fuente = "heit"
-        else:
-            fuente = "helv"
+    def aceptar_edicion_texto(self):
+        """Escribe el texto del editor en el PDF (si cabe) y cierra la edicion.
 
-        color_normalizado = tuple(c / 255 for c in datos["color"])
-        color_de_fondo = self.muestrear_color_de_fondo(pagina, bbox_detectado)
+        Devuelve True si escribio y cerro; False si no cabio (o hubo un
+        error) y la edicion sigue abierta. El rectangulo del PDF usa la
+        ALTURA FINAL del editor (que pudo crecer hacia abajo) convertida
+        a puntos PDF; el ancho es el del parrafo original.
+        """
+        if self.editor_texto_inline is None or self.parrafo_editando is None:
+            return False
+        if self.documento is None:
+            self.cancelar_edicion_texto()
+            return False
 
-        try:
-            if es_una_sola_linea:
-                # Borramos el texto viejo (tapandolo con el color de fondo real).
-                pagina.add_redact_annot(bbox_detectado, fill=color_de_fondo)
-                pagina.apply_redactions()
-                pagina.clean_contents()  # evita referencias colgando tras editar
-
-                if datos["usar_clic"]:
-                    self.accion_pendiente_por_clic = lambda num_pag, punto: self.escribir_texto_en_punto(
-                        num_pag, punto, datos["texto"], datos["tamano"], fuente, color_normalizado,
-                    )
-                    self.statusBar().showMessage("Ahora da clic en la pagina donde quieras el texto...")
-                    return
-
-                pagina.insert_text(
-                    (datos["x"], datos["y"]), datos["texto"], fontsize=datos["tamano"],
-                    fontname=fuente, color=color_normalizado,
-                )
-            else:
-                if datos["usar_clic"]:
-                    ancho_elegido, alto_elegido = datos["ancho"], datos["alto"]
-                    prueba_rect = fitz.Rect(0, 0, ancho_elegido, alto_elegido)
-                    if not self.texto_cabe_en_cuadro(datos["texto"], prueba_rect, datos["tamano"], fuente):
-                        QMessageBox.warning(
-                            self, "El texto no cabe en el cuadro",
-                            "El texto no cabe con el ancho/alto que dejaste. Agranda "
-                            "el cuadro o reduce el tamano de letra, y vuelve a intentar."
-                        )
-                        return
-                    pagina.add_redact_annot(bbox_real, fill=color_de_fondo)
-                    pagina.apply_redactions()
-                    pagina.clean_contents()
-                    self.accion_pendiente_por_clic = lambda num_pag, punto: self.escribir_cuadro_de_texto_en_punto(
-                        num_pag, punto, datos["texto"], datos["tamano"], fuente,
-                        color_normalizado, ancho_elegido, alto_elegido,
-                    )
-                    self.statusBar().showMessage("Ahora da clic en la pagina donde quieras el texto...")
-                    return
-
-                nuevo_rect = fitz.Rect(
-                    datos["x"], datos["y"],
-                    datos["x"] + datos["ancho"], datos["y"] + datos["alto"],
-                )
-                # PRIMERO probamos si el texto cabe, en un documento de PRUEBA
-                # aparte (que se descarta), SIN tocar para nada el PDF real.
-                if not self.texto_cabe_en_cuadro(datos["texto"], nuevo_rect, datos["tamano"], fuente):
-                    QMessageBox.warning(
-                        self, "El texto no cabe en el cuadro",
-                        "El texto que escribiste no cabe con ese tamano de letra en "
-                        "el cuadro que elegiste. Agranda el ancho/alto del cuadro o "
-                        "reduce el tamano de letra, y vuelve a intentar.\n\n"
-                        "No se modifico el documento (tu texto original sigue intacto)."
-                    )
-                    return
-
-                pagina.add_redact_annot(bbox_real, fill=color_de_fondo)
-                pagina.apply_redactions()
-                pagina.clean_contents()  # evita referencias colgando tras editar
-                pagina.insert_textbox(
-                    nuevo_rect, datos["texto"], fontsize=datos["tamano"],
-                    fontname=fuente, color=color_normalizado, align=0,
-                )
-        except Exception as error:
-            QMessageBox.critical(self, "Error al editar el texto", str(error))
-
-    def escribir_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color):
-        """Escribe una linea de texto en el punto donde el usuario dio clic."""
+        numero_pagina = self.parrafo_editando["pagina"]
         pagina = self.documento[numero_pagina]
-        try:
-            pagina.insert_text((punto.x, punto.y), texto, fontsize=tamano, fontname=fuente, color=color)
-            self.redibujar_pagina_individual(numero_pagina)
-        except Exception as error:
-            QMessageBox.critical(self, "Error al colocar el texto", str(error))
+        bbox = self.parrafo_editando["bbox"]
 
-    def escribir_cuadro_de_texto_en_punto(self, numero_pagina, punto, texto, tamano, fuente, color, ancho, alto):
-        """Escribe un cuadro de texto (varias lineas) en el punto donde el usuario dio clic."""
-        pagina = self.documento[numero_pagina]
+        # El editor puede haber crecido hacia abajo: su altura final en
+        # pixeles, convertida a puntos PDF (1 punto PDF = zoom pixeles
+        # en el visor), es la del rectangulo donde se escribe el texto.
+        altura_editor_px = self.editor_texto_inline.geometry().height()
+        rect_destino = fitz.Rect(
+            bbox.x0, bbox.y0, bbox.x1, bbox.y0 + altura_editor_px / self.zoom
+        )
+
+        # Fragmentos del editor -> HTML, con los tamanos ya en puntos PDF
+        fragmentos = documento_a_fragmentos(
+            self.editor_texto_inline.document(), self.zoom, self._dpi_logica()
+        )
+        html = fragmentos_a_html(fragmentos)
+
+        # CSS con las fuentes de Windows; si la carpeta no existe (por
+        # ejemplo en Linux), se deja sin CSS y MuPDF usa sus fuentes de
+        # respaldo: el programa nunca truena por una fuente faltante.
+        css = ""
+        archivo = None
+        if os.path.isdir(CARPETA_FUENTES_WINDOWS):
+            css = css_tipografias(CARPETA_FUENTES_WINDOWS)
+            archivo = fitz.Archive(CARPETA_FUENTES_WINDOWS)
+
+        # PRIMERO probamos si cabe, en un documento temporal descartable,
+        # SIN tocar el documento real. Solo avisa cuando ya NO queda
+        # espacio libre debajo para crecer mas.
+        if not cabe_texto_con_formato(rect_destino, html, css, archivo):
+            QMessageBox.warning(
+                self, "El texto no cabe en el cuadro",
+                "El texto no cabe ni usando todo el espacio libre debajo "
+                "del parrafo. Reduce el tamano de letra (en la barra de "
+                "formato) o divide el texto, y vuelve a intentar.\n\n"
+                "No se modifico el documento (tu texto original sigue "
+                "intacto) y el editor sigue abierto.",
+            )
+            return False
+
+        color_de_fondo = self.muestrear_color_de_fondo(pagina, bbox)
         try:
-            rect = fitz.Rect(punto.x, punto.y, punto.x + ancho, punto.y + alto)
-            pagina.insert_textbox(rect, texto, fontsize=tamano, fontname=fuente, color=color, align=0)
-            self.redibujar_pagina_individual(numero_pagina)
+            # Tapamos el parrafo original con su color de fondo real...
+            pagina.add_redact_annot(bbox, fill=color_de_fondo)
+            pagina.apply_redactions()
+            pagina.clean_contents()  # evita referencias colgando tras editar
+            # ...y escribimos el HTML con formato mixto en ese lugar,
+            # con la altura en que quedo el editor.
+            insertar_texto_con_formato(pagina, rect_destino, html, css, archivo)
         except Exception as error:
-            QMessageBox.critical(self, "Error al colocar el texto", str(error))
+            QMessageBox.critical(self, "Error al escribir el texto", str(error))
+            return False
+
+        self.cerrar_edicion_texto()
+        self.redibujar_pagina_individual(numero_pagina)
+        self.refrescar_recuadros_pagina(numero_pagina)
+        return True
+
+    def cancelar_edicion_texto(self):
+        """Cierra el editor y la barra de formato SIN tocar el documento."""
+        self.cerrar_edicion_texto()
+
+    def cerrar_edicion_texto(self):
+        """Quita la barra de formato y destruye el editor activo (si hay uno)."""
+        if self.barra_formato is not None:
+            self.removeToolBar(self.barra_formato)
+            self.barra_formato.deleteLater()
+            self.barra_formato = None
+        if self.editor_texto_inline is not None:
+            self.editor_texto_inline.deleteLater()
+            self.editor_texto_inline = None
+        self.parrafo_editando = None
 
     def editar_imagen(self, pagina, imagen):
         """Muestra opciones para reemplazar o eliminar una imagen detectada."""
@@ -1381,6 +1377,8 @@ class EditorPDF(QMainWindow):
 
     def colocar_imagen_en_punto(self, numero_pagina, punto, ruta, ancho, alto, mantener_proporcion):
         """Coloca una imagen ya elegida en el punto donde el usuario dio clic (esquina superior izquierda)."""
+        if self.documento is None:
+            return
         pagina = self.documento[numero_pagina]
         nuevo_rect = fitz.Rect(punto.x, punto.y, punto.x + ancho, punto.y + alto)
         try:
@@ -1457,6 +1455,9 @@ class EditorPDF(QMainWindow):
         if self.documento is None:
             QMessageBox.information(self, "Aviso", "Primero abre un PDF.")
             return
+        # Guardar mientras hay una edicion en linea pendiente la cancela
+        # (el texto no aceptado no se escribe en el PDF).
+        self.cancelar_edicion_texto()
         ruta_destino, _ = QFileDialog.getSaveFileName(self, "Guardar como", "", "Archivos PDF (*.pdf)")
         if not ruta_destino:
             return
@@ -1473,6 +1474,9 @@ class EditorPDF(QMainWindow):
         if self.documento is None:
             QMessageBox.information(self, "Aviso", "Primero abre un PDF.")
             return
+        # Guardar mientras hay una edicion en linea pendiente la cancela
+        # (el texto no aceptado no se escribe en el PDF).
+        self.cancelar_edicion_texto()
         if not self.ruta_actual:
             # Si el PDF no vino de un archivo en disco (poco probable aqui), usamos "Guardar como"
             self.guardar_como()
@@ -1505,6 +1509,10 @@ class EditorPDF(QMainWindow):
         )
         if respuesta != QMessageBox.Yes:
             return
+
+        # Ya se confirmo el cierre: si habia una edicion en linea, se
+        # descarta su texto pendiente y se quita la barra de formato.
+        self.cancelar_edicion_texto()
 
         self.documento.close()
         self.documento = None

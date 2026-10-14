@@ -274,8 +274,637 @@ realmente hace. Base ordenada para arrancar la Fase 5.
 - Ícono propio del programa y creación de la carpeta `assets/`
 - Fase 9: manual de usuario, capturas de pantalla, video demo
 - **Git:** los cambios de esta sesión están en la rama local `estandarizar`, que además
-  tenía 2 commits sin publicar desde el 2026-09-18. Falta decidir con el usuario cuándo
+  tenía 2 commits sin publicar desde 2026-09-18. Falta decidir con el usuario cuándo
   hacer commit y cuándo subirlos a GitHub.
+
+---
+
+## Sesión 7 — 2026-10-10
+
+**Objetivo de la sesión:** Tarea 0 del plan `DISENO_EDITOR_TEXTO.md`: preparar las
+herramientas de desarrollo (pytest y pyright) y el punto de partida de las pruebas
+automáticas (`tests/conftest.py`), sin tocar el código del programa.
+
+**Actividades realizadas:**
+1. **`requirements-dev.txt` creado** con `pytest` y `pyright`, marcados como
+   dependencias solo de desarrollo (el programa no las necesita para funcionar).
+2. **Instalación en el `venv`** con `pip install -r requirements-dev.txt`:
+   `pytest 9.1.1` se instaló nuevo (más sus dependencias `colorama` e `iniconfig`);
+   `pyright 1.1.414` ya estaba instalado.
+3. **`tests/conftest.py` creado**: agrega la raíz del proyecto y `app/` a `sys.path`
+   (los imports van sin prefijo de paquete, igual que al lanzar `iniciar.bat`) y
+   fija `QT_QPA_PLATFORM=offscreen` para que las ventanas de prueba no se abran en
+   pantalla.
+4. Verificación manual del `conftest.py` con `runpy`: la variable
+   `QT_QPA_PLATFORM` queda en `offscreen` y las dos rutas aparecen en `sys.path`.
+5. **Pyright**: 44 errores, todos preexistentes en `app/main.py` (enums cortos de
+   Qt, `Document` iterable, `PDF_ENCRYPT_AES_256`, `pixmap_limpio`, más algunos
+   `reportOptionalMemberAccess`/`reportOptionalSubscript`); ninguno en los archivos
+   nuevos.
+6. **Pytest**: corre sin error de configuración; termina con "no tests ran" y
+   código de salida 5, que es el código estándar de pytest cuando no hay pruebas
+   (todavía no existe ningún archivo `test_*.py`).
+
+**Resultado:** Base de pruebas lista: a partir de la Tarea 1, cada módulo nuevo
+tendrá sus pruebas en `tests/` y bastará con `pytest -v`. El programa no se tocó.
+
+**Pendiente:**
+- Tarea 1: `app/formato_html.py` (tipografías, CSS, fragmentos → HTML) y sus pruebas.
+- Errores de pyright en `app/main.py` que no están en la lista de "ruido conocido"
+  de AGENTS.md (`"widget" is not a known attribute of "None"` en la línea 610 y
+  varios `Object of type "None" is not subscriptable` en 778, 1298, 1307 y 1384).
+  No se corrigieron: están fuera del alcance de la Tarea 0.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` es el resto de pruebas de
+  una sesión anterior que ya no existen; no se borró nada sin permiso.
+
+---
+
+## Sesión 8 — 2026-10-10
+
+**Objetivo de la sesión:** Mantenimiento (fuera del plan `DISENO_EDITOR_TEXTO.md`):
+corregir los 5 errores de pyright que quedaron al aire en `app/main.py` después de
+la Sesión 7 y que no forman parte del "ruido conocido" de AGENTS.md, sin tocar nada
+más.
+
+**Actividades realizadas:**
+1. **`app/main.py` línea 610** (`dibujar_todas_las_paginas`): `takeAt(0)` puede
+   devolver `None`. Se agregó `if item is None: continue` (líneas 610–611) antes de
+   llamar `item.widget()`.
+2. **`app/main.py` línea 776** (`redibujar_pagina_individual`): al inicio del método
+   se agregó `if self.documento is None: return` (líneas 776–777), el mismo estilo
+   que ya se usa en otros métodos (por ejemplo `al_seleccionar_rectangulo`).
+3. **`app/main.py` línea 1302** (`escribir_texto_en_punto`): mismo guard
+   `if self.documento is None: return` (líneas 1302–1303) antes de
+   `pagina = self.documento[numero_pagina]`.
+4. **`app/main.py` línea 1313** (`escribir_cuadro_de_texto_en_punto`): mismo guard
+   (líneas 1313–1314).
+5. **`app/main.py` línea 1392** (`colocar_imagen_en_punto`): mismo guard
+   (líneas 1392–1393).
+6. **Pyright**: de 44 errores a **39**, todos restantes son el ruido conocido de
+   AGENTS.md (enums cortos de Qt, `Document` iterable, `PDF_ENCRYPT_AES_256`,
+   `pixmap_limpio`). Los 5 objetivos desaparecieron.
+7. **Pytest**: sin pruebas todavía (sale "no tests ran", código 5), igual que en la
+   Sesión 7; no hay errores de configuración.
+
+**Resultado:** `app/main.py` ya no tiene errores de pyright fuera de la lista de
+ruido conocido. Las 5 correcciones son defensivas: en condiciones normales el
+documento está abierto y `takeAt` no devuelve `None`, así que el comportamiento del
+programa no cambia; solo se evita un choque teórico si eso llegara a pasar.
+
+**Pendiente:**
+- Tarea 1 del diseño: `app/formato_html.py` (tipografías, CSS, fragmentos → HTML)
+  y sus pruebas.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se borró
+  nada sin permiso.
+- **Corrección posterior (misma sesión):** en `dibujar_todas_las_paginas` se cambió
+  `continue` por `break` en la guarda de `takeAt` (línea 611): si `takeAt(0)`
+  devolviera `None`, `count` no bajaría y `continue` causaría un ciclo infinito;
+  con `break` se sale del `while` y no queda colgado el programa.
+
+---
+
+## Sesión 9 — 2026-10-10
+
+**Objetivo de la sesión:** Tarea 1 del plan `DISENO_EDITOR_TEXTO.md`: crear
+`app/formato_html.py` con las tipografías, el CSS de los `@font-face` y la
+conversión de fragmentos del editor a HTML para `insert_htmlbox`, más sus
+pruebas automáticas. No se tocó `app/main.py` ni la ventana de edición.
+
+**Actividades realizadas:**
+1. **`app/formato_html.py` creado** (144 líneas), con tres piezas:
+   - Constante `TIPOGRAFIAS` (líneas 25–56): la tabla del diseño con las 5
+     tipografías (Arial, Times New Roman, Calibri, Verdana y Courier New) y
+     sus 4 archivos .ttf cada una (normal, negrita, cursiva, negrita+cursiva).
+   - `CARPETA_FUENTES_WINDOWS = r"C:\Windows\Fonts"` (línea 59).
+   - `tipografias_disponibles(carpeta)` (líneas 62–74): devuelve solo los
+     nombres cuyos 4 archivos existen en la carpeta indicada; si falta
+     alguno, esa tipografía no se ofrece y el programa no truena.
+   - `css_tipografias(carpeta)` (líneas 77–100): un `@font-face` por
+     variante (familia + font-weight + font-style + `src: url(archivo.ttf)`)
+     de cada tipografía disponible; con carpeta vacía el CSS queda vacío.
+     Los archivos se referencian solo por nombre porque el CSS se pasará a
+     `insert_htmlbox` junto con un `fitz.Archive` de esa misma carpeta
+     (eso llega en la Tarea 2).
+   - `fragmentos_a_html(fragmentos)` (líneas 107–144): convierte cada
+     fragmento (texto, familia, tamano, negrita, cursiva, subrayado, color)
+     en un `<span style="...">`; solo agrega las propiedades activas
+     (`font-weight:bold` únicamente si el fragmento está en negrita),
+     escapa `<`, `>` y `&`, convierte `\n` en `<br>` y pone el color como
+     `#rrggbb`.
+2. **`tests/test_formato_html.py` creado** (65 líneas) con las 4 pruebas que
+   pide el diseño, todas en verde:
+   - `test_escapa_caracteres_especiales`: `"<b>"` queda como `&lt;b&gt;`.
+   - `test_negrita_solo_en_su_span`: `font-weight:bold` aparece una sola
+     vez, solo en el fragmento en negrita.
+   - `test_salto_de_linea_se_convierte_en_br`: `"\n"` produce `<br>`.
+   - `test_carpeta_vacia_no_hay_tipografias_ni_css`: carpeta temporal vacía
+     → lista vacía y CSS `""`.
+   - El import va sin prefijo de paquete (`from formato_html import ...`,
+     igual que correrá el programa); como Pyright no ve la ruta que agrega
+     `conftest.py` en tiempo de ejecución, el archivo lleva
+     `# pyright: reportMissingImports=false` explicado en su docstring.
+3. **Pyright**: 39 errores, los mismos 39 de ruido conocido de
+   `app/main.py` que ya había antes de esta tarea; cero errores nuevos en
+   los archivos creados.
+4. **Pytest**: 4 pruebas, 4 en verde.
+
+**Resultado:** `app/formato_html.py` queda listo como módulo puro (sin
+ventanas): la Tarea 2 podrá usar `fragmentos_a_html` y `css_tipografias`
+para escribir texto con formato mixto en el PDF real. El programa en
+funcionamiento no cambió todavía (nada lo importa aún).
+
+**Pendiente:**
+- Tarea 2: `cabe_texto_con_formato` e `insertar_texto_con_formato` en
+  `app/formato_html.py`, usando `insert_htmlbox` con un `fitz.Archive` de
+  la carpeta de fuentes, y sus pruebas con un PDF en memoria.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se
+  borró nada sin permiso.
+
+---
+
+## Sesión 10 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 2 del plan `DISENO_EDITOR_TEXTO.md`: agregar a
+`app/formato_html.py` las funciones que comprueban si un HTML con formato cabe en
+un cuadro y que lo escriben en el PDF real con `insert_htmlbox`, más sus pruebas
+con un PDF en memoria. No se tocó `app/main.py` ni la ventana de edición.
+
+**Actividades realizadas:**
+1. **`app/formato_html.py` modificado**:
+   - Línea 19: se agregó `import fitz  # PyMuPDF` (el módulo ya lo usará para
+     crear el documento temporal y escribir en la página).
+   - Líneas 154–175: `cabe_texto_con_formato(rect, html, css, archivo)` → crea un
+     documento PDF temporal descartable (mismo patrón que `texto_cabe_en_cuadro`
+     de `main.py`), llama `insert_htmlbox(..., scale_low=1)` y devuelve
+     `True`/`False` según la holgura devuelta (negativa = no cabe). Con
+     `scale_low=1` el texto nunca se reduce para que quepa.
+   - Líneas 178–185: `insertar_texto_con_formato(pagina, rect, html, css,
+     archivo)` → escribe en la página real con el mismo `scale_low=1`; solo se
+     llama después de confirmar con la función anterior que cabe.
+   - Líneas 5–7: se ajustó el docstring del módulo para mencionar estas
+     funciones.
+2. **`tests/test_insertar_formato.py` creado** (85 líneas), con las 2 pruebas
+   que pide el diseño, usando un PDF en memoria (`fitz.open()` sin archivos):
+   - `test_inserta_negrita_solo_en_actualizado` (líneas 47–68): construye el
+     HTML de "Precio actualizado" con solo la segunda palabra en negrita (con
+     `fragmentos_a_html`), confirma que cabe, lo inserta y verifica con
+     `get_text("dict")` que hay un span en negrita con "actualizado" (bit 16 de
+     flags = `TEXT_FONT_BOLD`) y otro sin negrita con "Precio".
+   - `test_texto_enorme_no_cabe_y_no_modifica_el_documento` (líneas 71–85):
+     4000 palabras en un cuadro de 40x40 puntos → `cabe_texto_con_formato`
+     devuelve `False` y el documento real queda intacto (el texto de la página
+     no cambia).
+3. **Pyright**: 39 errores, los mismos 39 de ruido conocido de `app/main.py`;
+   cero errores nuevos en los archivos creados o modificados.
+4. **Pytest**: 6 pruebas (las 4 de la Tarea 1 + las 2 nuevas), todas en verde.
+
+**Resultado:** El lado PyMuPDF de `app/formato_html.py` queda completo para el
+editor de texto: ya se puede pasar de fragmentos → HTML → PDF con formato mixto,
+y antes de tocar el documento real se puede preguntar si el texto cabe. El
+programa en funcionamiento no cambió todavía (nada importa estas funciones
+todavía); eso llega en la Tarea 5.
+
+**Pendiente:**
+- Tarea 3: `app/editor_texto.py` con la clase `EditorTextoInline` y la función
+  `documento_a_fragmentos`, y sus pruebas en modo offscreen.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se borró
+  nada sin permiso.
+
+---
+
+## Sesión 11 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 3 del plan `DISENO_EDITOR_TEXTO.md`: crear
+`app/editor_texto.py` con la clase `EditorTextoInline` (el `QTextEdit` que se
+pone encima de un párrafo) y la función `documento_a_fragmentos`, más sus
+pruebas en modo offscreen. También corregir la fecha de la sesión anterior y
+agregar la regla de la fecha a `AGENTS.md`.
+
+**Actividades realizadas:**
+1. **`app/editor_texto.py` creado** (112 líneas):
+   - Líneas 20–46: clase `EditorTextoInline(QTextEdit)` → sin marco
+     (`QFrame.Shape.NoFrame`, línea 33), fondo blanco semitransparente
+     (`rgba(255, 255, 255, 200)`, línea 34) y señales `cancelado`/`aceptado`
+     (líneas 28–29). En `keyPressEvent` (líneas 36–46), Esc → `cancelado` y
+     Ctrl+Enter (`Qt.Key.Key_Return`/`Key_Enter` + `ControlModifier`) →
+     `aceptado`; todo lo demás pasa al `QTextEdit` de base. Se usaron enums
+     completos de Qt en todo el archivo.
+   - Líneas 53–112: `documento_a_fragmentos(documento_qt)` → recorre bloques
+     y fragmentos del documento con `bloque.begin()` + `iterador += 1`, y
+     devuelve diccionarios con `texto`, `familia`, `tamano`, `negrita`,
+     `cursiva`, `subrayado` y `color` (tupla rgb), el formato que consume
+     `fragmentos_a_html`. `negrita` se decide con
+     `fontWeight() >= int(QFont.Weight.Bold)` (línea 87); la familia y el
+     tamaño caen a la fuente por defecto del documento si el fragmento no los
+     trae (líneas 76–77); el color negro `(0, 0, 0)` si es inválido (líneas
+     78–82). Entre bloques agrega `"\n"` al final del último fragmento, o un
+     fragmento solo con `"\n"` si el bloque está vacío (líneas 94–107), para
+     que después se convierta en `<br>`.
+2. **`tests/test_editor_texto.py` creado** (63 líneas, con
+   `# pyright: reportMissingImports=false` y `QApplication` única a nivel de
+   módulo), con 3 pruebas:
+   - `test_documento_a_fragmentos_con_negrita_en_dos`: escribe "uno dos tres",
+     selecciona "dos" (posiciones 4–7), le pone negrita con
+     `mergeCharFormat` y verifica que ese fragmento tiene `negrita=True` y
+     que "uno"/"tres" no.
+   - `test_esc_emite_cancelado` y `test_ctrl_enter_emite_aceptado`:
+     envían un `QKeyEvent` directo a `keyPressEvent` y comprueban la señal.
+3. **Verificación previa de la API de Qt** (script temporal fuera del
+   repositorio): se confirmó que `iterador += 1`, `mergeCharFormat`,
+   `fontFamilies()` (el antiguo `fontFamily()` está obsoleto) y la lectura de
+   `fontWeight()`, `fontItalic()`, `fontUnderline()` y `foreground()` funcionan
+   en el venv; se descartó el script sin borrar nada del proyecto.
+4. **`BITACORA.md` corregido**: la sesión 10 estaba fechada 2026-10-10 y el
+   comando `Get-Date -Format yyyy-MM-dd` dio 2026-10-11, así que se cambió la
+   fecha de la sesión 10 a 2026-10-11 (misma fecha que esta sesión).
+5. **`AGENTS.md` modificado** (líneas 59–62): en "Al terminar cada sesión",
+   punto 1, se agregó la regla de obtener la fecha con
+   `Get-Date -Format yyyy-MM-dd` y nunca copiarla de la entrada anterior.
+6. **Pyright**: 39 errores, los mismos 39 de ruido conocido de `app/main.py`;
+   cero errores en `app/editor_texto.py` ni `tests/test_editor_texto.py`.
+7. **Pytest**: 9 pruebas (4 de la Tarea 1 + 2 de la Tarea 2 + 3 nuevas),
+   todas en verde.
+
+**Resultado:** El lado Qt del editor de texto queda listo: `EditorTextoInline`
+es el cuadro que se superpondrá al párrafo (con Esc/Ctrl+Enter) y
+`documento_a_fragmentos` traduce lo que el usuario escribió al formato de
+fragmentos que ya sabe consumir `formato_html.py`. El programa en
+funcionamiento todavía no lo usa; eso llega en la Tarea 5.
+
+**Pendiente:**
+- Tarea 4: la barra de formato (negrita, cursiva, etc.) según
+  `DISENO_EDITOR_TEXTO.md`.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se borró
+  nada sin permiso.
+
+---
+
+## Sesión 12 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 4 del plan `DISENO_EDITOR_TEXTO.md`: agregar
+a `app/editor_texto.py` la clase `BarraFormato(QToolBar)` con selector de
+tipografía, tamaño, botones de Negrita/Cursiva/Subrayado, botón de color,
+Aceptar y Cancelar, y sus pruebas en modo offscreen. No se tocó `main.py`.
+
+**Actividades realizadas:**
+1. **`app/editor_texto.py` modificado** (de 112 a 314 líneas):
+   - Líneas 1–28: se actualizó el docstring del módulo para mencionar
+     `BarraFormato` y se agregaron los imports (`QColor`, `QComboBox`,
+     `QColorDialog`, `QPushButton`, `QToolBar`, `QToolButton`, y de
+     `formato_html` las constantes `CARPETA_FUENTES_WINDOWS` y
+     `tipografias_disponibles`). Los imports entre módulos de `app/` van
+     sin prefijo de paquete, como manda `AGENTS.md`.
+   - Línea 67: constante `TAMANOS` con los 16 tamaños en puntos que ofrece
+     la barra (8 a 72, como un procesador de textos clásico).
+   - Líneas 70–249: clase `BarraFormato(QToolBar)` →
+     - `__init__` (líneas 85–143): recibe el editor como parámetro
+       obligatorio; arma el selector de tipografía con **solo**
+       `tipografias_disponibles(CARPETA_FUENTES_WINDOWS)` (líneas 90–95),
+       el de tamaño con `TAMANOS` (líneas 98–102), los botones activables
+       N/C/S (`QToolButton` con `setCheckable(True)`, líneas 105–119), el
+       botón Color (líneas 122–125), Aceptar y Cancelar (líneas 128–134);
+       al final se conecta `editor.cursorPositionChanged` a
+       `actualizar_desde_cursor` y se llama una vez (líneas 137–138). Se
+       usaron enums completos de Qt en todo el archivo (p. ej.
+       `QFont.Weight.Bold`).
+     - Cada control aplica el formato **solo a la selección** con
+       `mergeCurrentCharFormat`: `aplicar_tipografia` (145–151),
+       `aplicar_tamano` (153–159), `alternar_negrita` (161–168),
+       `alternar_cursiva` (170–174) y `alternar_subrayado` (176–180).
+       Sin selección aplica a lo que se escriba después (comportamiento
+       normal de Qt, igual que Word).
+     - Botón de color en **dos partes**: `elegir_color` (líneas 182–186)
+       abre el `QColorDialog` de Windows y `aplicar_color(QColor)`
+       (líneas 188–194) aplica el color a la selección y pinta el botón
+       con `_pintar_boton_color` (196–202). Las pruebas usan solo
+       `aplicar_color`; el diálogo nunca se abre en pruebas.
+     - Señales `aceptar` y `cancelar` (líneas 80–81), emitidas por los
+       botones Aceptar/Cancelar.
+     - `actualizar_desde_cursor` (líneas 204–244): lee el
+       `charFormat()` del cursor y refleja familia, tamaño, los tres
+       botones y el color; **bloquea las señales de sus controles**
+       (`blockSignals`) mientras actualiza, para que marcar un botón no
+       vuelva a aplicar el formato al cursor ni dispare un bucle de
+       señales. El tamaño más cercano se resuelve con
+       `_indice_de_tamano` (246–249).
+2. **`tests/test_editor_texto.py` modificado** (de 63 a 142 líneas), con
+   las 2 pruebas que pide el diseño más 2 que cubren las reglas
+   adicionales (color y tipografías):
+   - `test_barra_negrita_aplica_solo_a_la_seleccion` (líneas 67–89):
+     selecciona "dos" en "uno dos tres", activa `barra.boton_negrita` y
+     verifica con `documento_a_fragmentos` que solo "dos" quedó en
+     negrita.
+   - `test_barra_refleja_negrita_del_cursor` (líneas 91–117): pone "dos"
+     en negrita, deja el cursor en "uno", crea la barra (botón sin
+     marcar) y al mover el cursor dentro de "dos" verifica que el botón
+     Negrita se marca solo.
+   - `test_barra_aplicar_color_a_la_seleccion` (líneas 119–135): usa
+     `aplicar_color(QColor(200, 10, 50))` sobre "dos" y verifica la
+     tupla rgb del fragmento; el diálogo no se abre.
+   - `test_barra_tipografias_solo_las_disponibles` (líneas 137–142):
+     verifica que el combo contiene exactamente
+     `tipografias_disponibles(CARPETA_FUENTES_WINDOWS)`.
+3. **Pyright**: 39 errores, los mismos 39 de ruido conocido de `app/main.py`;
+   cero errores en `app/editor_texto.py` ni `tests/test_editor_texto.py`.
+4. **Pytest**: 13 pruebas (3 de la Tarea 3 + 4 nuevas + 4 de la Tarea 1 +
+   2 de la Tarea 2), todas en verde.
+
+**Resultado:** La barra de formato queda completa y probada: aplica
+tipografía, tamaño, negrita, cursiva, subrayado y color solo a la
+selección, refleja el formato del cursor sin bucles de señales, y expone
+las señales `aceptar`/`cancelar`. Con esto están listos el cuadro editable
+(Tarea 3) y la barra (Tarea 4); el programa en funcionamiento todavía no
+los usa porque falta la Tarea 5, que los conecta en `main.py`.
+
+**Pendiente:**
+- Tarea 5: conectar todo en `app/main.py` (`editar_contenido_en_punto`),
+  con su validación visual de Diego.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no se
+  borró nada sin permiso.
+
+---
+
+## Sesión 13 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 5 del plan `DISENO_EDITOR_TEXTO.md`:
+conectar el editor en línea y la barra de formato en `app/main.py`, con la
+conversión de tamaños puntos PDF ↔ puntos Qt según el zoom del visor.
+
+**Actividades realizadas:**
+1. **`app/editor_texto.py` modificado** (de 314 a 365 líneas):
+   - Líneas 10–15: docstring del módulo actualizado para mencionar
+     `tamano_pdf_a_editor` / `tamano_editor_a_pdf`.
+   - Líneas 80–98: nuevas funciones `tamano_pdf_a_editor` (punto PDF →
+     punto Qt: `punto_pdf * zoom * 72 / dpi_logica`) y `tamano_editor_a_pdf`
+     (inversa exacta). Fórmula verificada empíricamente: a 96 DPI y zoom 1,
+     12 puntos PDF = 9 puntos Qt.
+   - Líneas 111–124: `BarraFormato.__init__` ahora recibe `zoom=1.0` y
+     `dpi_logica=96.0` y los guarda; docstring explica que el combo de
+     tamaños muestra puntos PDF.
+   - Líneas 190–200: `aplicar_tamano` convierte el punto PDF elegido a
+     puntos Qt antes de aplicarlo.
+   - Líneas 268–274: `actualizar_desde_cursor` convierte el punto Qt del
+     cursor a puntos PDF para resaltar el tamaño en el combo.
+   - Líneas 299–365: `documento_a_fragmentos` acepta `zoom=None` y
+     `dpi_logica=None`; si se pasan, convierte cada tamaño Qt → PDF
+     (para el HTML del PDF). Sin parámetros se comporta como antes (las
+     pruebas viejas no cambian).
+2. **`app/main.py` modificado** (de 1776 a 1855 líneas):
+   - Líneas 39–51: imports nuevos (`QFont`, `QTextCharFormat`,
+     `QTextCursor` en QtGui; de `editor_texto` las 4 funciones; de
+     `formato_html` las 6 utilidades del HTML con formato).
+   - Líneas 440–445: atributos `editor_texto_inline`, `barra_formato` y
+     `parrafo_editando` (todos en `None` al arrancar).
+   - Línea 628: `dibujar_todas_las_paginas` cancela la edición activa
+     antes de destruir las etiquetas (cubre también abrir PDF, rotar,
+     eliminar/insertar página, guardar).
+   - Líneas 715 y 722: `zoom_mas` / `zoom_menos` cancelan la edición
+     antes de redibujar con el nuevo zoom.
+   - Líneas 737–738: `al_seleccionar_rectangulo` no hace nada si hay
+     una edición en línea abierta (los clics quedan bloqueados).
+   - Líneas 788 y 795: la llamada a `editar_contenido_en_punto` ahora
+     pasa `numero_pagina`; el refresco de recuadros se delegó a
+     `refrescar_recuadros_pagina`.
+   - Líneas 819–838: nuevo método `refrescar_recuadros_pagina`
+     (extraído del bloque viejo de `al_seleccionar_rectangulo`; también
+     verifica que la herramienta siga siendo "Editar contenido").
+   - Líneas 1136–1154: `editar_contenido_en_punto` ahora recibe
+     `numero_pagina` y pasa el párrafo encontrado a
+     `editar_parrafo_encontrado(numero_pagina, pagina, parrafo)`.
+   - Líneas 1218–1289: `editar_parrafo_encontrado` reescrito por
+     completo: cancela edición previa, crea un `EditorTextoInline` hijo
+     de la `EtiquetaPDF` con `setGeometry(bbox * zoom)`, le pone el
+     texto y el formato inicial (primera tipografía disponible,
+     tamaño PDF→Qt, color del párrafo, negrita/cursiva según la fuente
+     original), conecta `aceptado`/`cancelado`, y agrega una
+     **`BarraFormato` nueva** debajo de la barra principal con
+     `addToolBarBreak` + `addToolBar`. Guarda los tres atributos.
+   - Líneas 1291–1296: nuevo método `_dpi_logica` (DPI lógico de la
+     pantalla; 96 si no hay pantalla, por ejemplo en pruebas).
+   - Líneas 1298–1352: nuevo método `aceptar_edicion_texto`: convierte
+     el documento Qt a fragmentos **con** zoom/DPI (tamaños ya en
+     puntos PDF), arma el HTML, prueba primero con
+     `cabe_texto_con_formato` en el documento real (si no cabe, avisa
+     y el editor sigue abierto), tapa el párrafo con
+     `muestrear_color_de_fondo` + redact, escribe con
+     `insertar_texto_con_formato`, y cierra + redibuja la página.
+   - Líneas 1354–1367: `cancelar_edicion_texto` y `cerrar_edicion_texto`
+     (quita la barra con `removeToolBar`, destruye editor y barra, y
+     deja los tres atributos en `None`).
+   - Líneas 1541, 1560 y 1596: `guardar_como`, `guardar` y
+     `cerrar_documento` cancelan la edición activa (en `cerrar_documento`
+     solo después de confirmar con Yes).
+3. **`tests/test_editor_texto.py` modificado** (de 142 a 157 líneas):
+   - `test_tamano_pdf_y_editor_ida_y_vuelta` (líneas 146–157): verifica
+     la ida y vuelta exacta en 4 tamaños × 4 zooms y el caso 12 pt PDF
+     = 9 pt Qt a 96 DPI y zoom 1.
+4. **`tests/test_edicion_inline.py` creado** (140 líneas, 2 pruebas):
+   - `test_editar_parrafo_en_linea_y_aceptar` (líneas 62–106): crea un
+     PDF real en `tmp_path` con "uno dos tres" a 12 pt, abre
+     `EditorPDF`, detecta el párrafo (bbox ensanchado +-10/+-5 para que
+     la prueba de "si cabe" no dispare un QMessageBox que bloquearía la
+     ejecución offscreen), edita en línea, pone "dos" en negrita con el
+     botón de la barra, acepta, y verifica que la edición se cerró, que
+     el span de "dos" tiene la marca de negrita (`flags & 16`), que el
+     texto sigue legible (normalizando los espacios duros `\xa0` que
+     genera `insert_htmlbox`), y que tras `guardar()` el archivo en
+     disco conserva todo.
+   - `test_editar_parrafo_y_cancelar_no_toca_el_pdf` (líneas 109–124):
+     cambia el texto en el editor pero cancela; verifica que el PDF no
+     cambió y que los atributos quedaron en `None`.
+5. **Pyright**: 38 errores, los mismos de ruido conocido de `app/main.py`
+   (enums Qt, `Document` iterable, `PDF_ENCRYPT_AES_256`,
+   `pixmap_limpio`); cero errores en `app/editor_texto.py` ni en los
+   tests.
+6. **Pytest**: 16 pruebas (2 de la Tarea 5 + 8 de la Tarea 4/3 + 1 nueva
+   de conversión + 4 de la Tarea 1 + 2 de la Tarea 2), todas en verde.
+
+**Resultado:** La herramienta "Editar contenido (texto e imagenes)" ya
+abre el párrafo en línea con una barra de formato completa debajo de la
+principal. El texto solo se escribe en el PDF al dar Aceptar (o
+Ctrl+Enter); Esc, Cancelar, guardar, cerrar y cambiar el zoom descartan
+lo no aceptado. Los tamaños del combo son puntos PDF y el editor los
+muestra a la escala del zoom, con ida y vuelta exacta.
+
+**Pendiente:**
+- Validación visual de Diego (ver checklist del resumen): tamaño del
+  editor vs página a distintos zooms y DPI de Windows, barra debajo de
+  la principal, Esc/Ctrl+Enter, clics bloqueados durante la edición,
+  guardar/cerrar/zoom descartando la edición.
+- Tarea 6: limpiar `DialogoEditarCuadroDeTexto` y los métodos
+  `escribir_texto_en_punto` / `escribir_cuadro_de_texto_en_punto` que
+  quedaron sin llamadores.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no
+  se borró nada sin permiso.
+
+---
+
+## Sesión 14 — 2026-10-11
+
+**Objetivo de la sesión:** Corrección de la Tarea 5 tras la validación
+visual de Diego: fondo opaco del editor con el color real de la página,
+sin barras de desplazamiento (el editor crece hacia abajo), cambio de
+párrafo como Acrobat (clic en otro párrafo acepta el actual y abre el
+nuevo) y pruebas de todo.
+
+**Actividades realizadas:**
+1. **Punto 1 — texto doble (fondo opaco):**
+   - `app/editor_texto.py`: docstring del módulo (líneas 5–18) y de la
+     clase (40–49) actualizados; `EditorTextoInline.__init__` (52–62)
+     ya no usa `rgba(..., 200)` sino blanco opaco por defecto, y tiene
+     el nuevo método `pintar_fondo(color_rgb)` (64–69) que pinta el
+     fondo opaco con una tupla rgb 0–255.
+   - `app/main.py`: en `editar_parrafo_encontrado` (1277–1280) se mide
+     el color con `muestrear_color_de_fondo(pagina, bbox)` y se pinta
+     con `editor.pintar_fondo(...)` (convertido de 0–1 a 0–255): el
+     cuadro se ve del mismo color que la página y no se ve el texto
+     original debajo.
+2. **Punto 2 — sin scrollbars, crece hacia abajo:**
+   - `app/editor_texto.py`: en `__init__` (55–58) las dos barras de
+     desplazamiento quedan siempre apagadas
+     (`Qt.ScrollBarPolicy.ScrollBarAlwaysOff`); nueva función pura
+     `calcular_altura_editor(altura_contenido, altura_minima,
+     altura_maxima)` (122–138) que devuelve el contenido sin bajar del
+     piso (parrafo original) ni pasar del techo (parrafo + espacio
+     libre).
+   - `app/main.py`: `editar_parrafo_encontrado` calcula
+     `altura_minima` = alto del párrafo × zoom y `altura_maxima` = esa
+     más `calcular_espacio_disponible_vertical` × zoom (si no hay texto
+     debajo, hasta `pagina.rect.height - bbox.y1`, líneas 1259–1265);
+     las guarda en `parrafo_editando` (1318–1322); conecta
+     `documentSizeChanged` a `_ajustar_altura_editor` (1310–1312), el
+     nuevo método (1336–1358) que recalculla la altura con
+     `calcular_altura_editor` y solo cambia la geometría del editor.
+     `aceptar_edicion_texto` (1365–1436) ahora usa un `rect_destino`
+     (1384–1389) con la altura final del editor en píxeles convertida
+     a puntos PDF (`altura_editor_px / self.zoom`); el aviso de "no
+     cabe" quedó solo para cuando ya no queda espacio libre (mensaje
+     actualizado, 1409–1418).
+3. **Punto 3 — cambio de párrafo como Acrobat:**
+   - `app/main.py`: `al_seleccionar_rectangulo` (732–773) ya no
+     bloquea los clics con la edición abierta: si hay editor y la
+     herramienta es "Editar contenido", un clic sobre un párrafo (el
+     mismo u otro) intenta `aceptar_edicion_texto()`; si devuelve
+     `True` (cabió), se rebusca el párrafo en el punto del clic (la
+     página ya se redibujó) y se abre ahí el editor; si devuelve
+     `False` (no cabe), el aviso ya salió y se sigue en la edición
+     actual. Clics fuera de párrafos u otras herramientas: no hacen
+     nada (749–755).
+   - `aceptar_edicion_texto` ahora devuelve `True`/`False` (True solo
+     al escribir y cerrar).
+4. **Punto 4 — pruebas:**
+   - `tests/test_editor_texto.py` (de 157 a 168 líneas):
+     `test_calcular_altura_editor_limita_entre_minima_y_maxima`
+     (líneas 161–168): contenido cómodo, piso, techo y techo<piso.
+   - `tests/test_edicion_inline.py` (de 140 a 193 líneas):
+     `test_clic_en_otro_parrafo_acepta_y_abre_el_nuevo` (143–193):
+     PDF con "parrafo A" y "parrafo B", edición de A con texto
+     cambiado, clic simulado en el centro de B vía
+     `al_seleccionar_rectangulo` con `QRect` en píxeles (y la
+     herramienta puesta en "Editar contenido"), verifica que "A
+     editado" quedó en el PDF y que el editor abierto es el de B
+     (`parrafo_editando["bbox"] == parrafo_b["bbox"]`). La aserción de
+     `parrafo_editando` del test de aceptar se ajustó a las 4 claves
+     nuevas (líneas 82–84).
+5. **Pyright**: 0 errores en `app/editor_texto.py` y los tests; los
+   mismos 38 de ruido conocido de `app/main.py` (enums Qt, `Document`
+   iterable, `PDF_ENCRYPT_AES_256`, `pixmap_limpio`).
+6. **Pytest**: 18 pruebas (3 de esta corrección + 15 previas), todas en
+   verde.
+
+**Resultado:** El editor en línea ya no muestra el texto original
+debajo (fondo opaco del color real de la página), no tiene scrollbars y
+crece hacia abajo conforme se escribe hasta el espacio libre (y al
+aceptar, el texto se escribe en el PDF con esa altura). Cambiar de
+párrafo funciona como en Acrobat: con una edición abierta, un clic en
+otro párrafo acepta el actual (si cabe) y abre el nuevo; si no cabe, se
+queda en el actual con el aviso.
+
+**Pendiente:**
+- Validación visual de Diego de esta corrección: fondo del cuadro igual
+  al de la página (títulos con color), editor creciendo al escribir
+  varias líneas (sin scrollbars), aviso solo al no tener espacio, y
+  clic en otro párrafo aceptando y abriendo el nuevo.
+- Tarea 6: limpiar `DialogoEditarCuadroDeTexto` y los métodos
+  `escribir_texto_en_punto` / `escribir_cuadro_de_texto_en_punto` que
+  quedaron sin llamadores.
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no
+  se borró nada sin permiso.
+
+---
+
+## Sesión 15 — 2026-10-11
+
+**Objetivo de la sesión:** Tarea 6 del plan `DISENO_EDITOR_TEXTO.md`
+(limpieza y documentación), ya validada por Diego la Tarea 5 y su
+corrección. Reglas: buscar cada candidato en todo el proyecto antes de
+borrar, no tocar `DialogoPosicionarImagen` ni nada de imágenes/formas,
+y documentar el estado + limitaciones conocidas.
+
+**Actividades realizadas:**
+
+1. **Búsquedas previas (grep en `app/` y `tests/`, antes de borrar):**
+   - `DialogoEditarCuadroDeTexto`: solo la definición de la clase;
+     cero instanciaciones ni referencias en código (las únicas apariciones
+     eran en `BITACORA.md` y este documento de diseño, que son
+     documentación histórica).
+   - `texto_cabe_en_cuadro`: solo la definición; cero llamadas
+     (`self.texto_cabe_en_cuadro(` no aparece en ningún archivo `.py`).
+   - `escribir_texto_en_punto` / `escribir_cuadro_de_texto_en_punto`:
+     solo las definiciones; ningún llamador.
+   - `QTextEdit` en el import de `app/main.py`: su único uso era la
+     caja de texto del diálogo borrado.
+2. **Borrados en `app/main.py` (de 1939 a 1774 líneas, −165):**
+   - Cabecera de sección + clase `DialogoEditarCuadroDeTexto` completas
+     (antes líneas 236–358: 123 líneas con sus 7 métodos).
+   - `texto_cabe_en_cuadro` (antes 1113–1131: 19 líneas) — era el helper
+     de "¿cabe?" del flujo viejo; el flujo nuevo usa
+     `cabe_texto_con_formato` de `formato_html.py`.
+   - `escribir_texto_en_punto` y `escribir_cuadro_de_texto_en_punto`
+     (antes 1453–1474: 22 líneas) — escribes del diálogo eliminado.
+   - `QTextEdit` quitado del import de `PySide6.QtWidgets` (hoy línea
+     36 del bloque 32–38). El resto de imports (`QFormLayout`,
+     `QDoubleSpinBox`, `QCheckBox`, `QDialog`, `QColorDialog`, …) se
+     queda: siguen usados por `DialogoPosicionarImagen`,
+     `DialogoReordenarPaginas` y `editar_forma`.
+   - **No se tocó** `DialogoPosicionarImagen` (156–233) ni nada de
+     imágenes y formas.
+3. **Referencias rotas por el borrado (documentación viva):**
+   - `app/formato_html.py` docstring de `cabe_texto_con_formato` (hoy
+     líneas 157–158): dejó de citar a `texto_cabe_en_cuadro de main.py`.
+   - `DISENO_EDITOR_TEXTO.md` línea ~65: ídem, la frase ahora dice que
+     la prueba vive en `cabe_texto_con_formato`.
+   - `BITACORA.md` NO se modifica: es historial.
+4. **Documentación del estado y de las 4 limitaciones conocidas:**
+   - `README.md`: checklist actualizado (líneas 15–16: edición tipo
+     Word en línea), sección "Estado actual" (31–38) con la Tarea 0–6
+     completada, y nueva subsección "✏️ Limitaciones conocidas de la
+     edición de texto" (40–48) con las 4 limitaciones.
+   - `ROADMAP.md` Fase 4 (26–45): ítem nuevo de la edición en línea con
+     barra de formato + ventana vieja eliminada, y las 4 limitaciones
+     reemplazan la nota técnica anterior.
+   - `DISENO_EDITOR_TEXTO.md`: bloque de estado COMPLETADA (8–11),
+     nueva sección "⚠️ Limitaciones conocidas" (40–48), y encabezados
+     de Tarea 0 a Tarea 6 marcados con ✅ (137, 147, 162, 177, 190,
+     206, 227).
+5. **Verificación:** grep final en `app/` y `tests/` → cero referencias
+   a lo borrado; **pyright** → mismos 38 ruidos conocidos de
+   `app/main.py` (enums Qt, `Document`, `PDF_ENCRYPT_AES_256`), 0
+   errores nuevos y 0 en los demás archivos; **pytest** → 18/18 en
+   verde.
+
+**Resultado:** El plan `DISENO_EDITOR_TEXTO.md` queda COMPLETO (Tareas
+0–6). La ventana "Editar cuadro de texto" y sus helpers ya no existen:
+la única forma de editar texto es la edición en línea tipo Word;
+imágenes y formas siguen intactos. README, ROADMAP (Fase 4) y el
+documento de diseño reflejan el estado terminado y las 4 limitaciones
+conocidas.
+
+**Pendiente:**
+- Validación visual de Diego de la documentación (revisión de README,
+  ROADMAP Fase 4 y del documento de diseño).
+- `tests/__pycache__/test_inline_editor.cpython-314.pyc` sigue ahí; no
+  se borró nada sin permiso.
 
 ---
 
