@@ -65,6 +65,9 @@ Cada fase es una entrega funcional. No pasamos a la siguiente hasta que la actua
 - [x] Documentado en `EMPAQUETADO.md`: pasos para Linux Y Windows, ícono/lanzador de escritorio
 - [x] Documentado el manejo de Windows Defender/SmartScreen (por qué pasa, cómo desbloquear, por qué usamos `--onedir` en vez de `--onefile`)
 - [x] Comprimir PDFs pesados desde el menú Herramientas → "Comprimir PDF..."
+- [x] Deshacer y Rehacer (menú Editar, Ctrl+Z / Ctrl+Y, plan `DISENO_DESHACER.md` Tareas 1–4):
+  historial de hasta 20 pasos / 300 MB en memoria, con la descripción de lo que se
+  deshace en el menú; deshabilitado en PDFs con contraseña
 - [ ] Pendiente: generar y probar el `.exe` en una PC con Windows de verdad (esto no se puede hacer desde Linux)
 - [ ] Pendiente: ícono propio del programa (por ahora usa el ícono genérico de PDF)
 

@@ -319,6 +319,9 @@ class EditorPDF(QMainWindow):
         # Historial de Deshacer/Rehacer (DISENO_DESHACER.md): copias del
         # documento en memoria, vaciadas al abrir o cerrar un PDF.
         self.historial = HistorialCambios()
+        # Regla 5: si el documento tiene contrasena (de usuario o solo
+        # de permisos), Deshacer y Rehacer quedan deshabilitados.
+        self.documento_protegido = False
 
         # Edicion de texto en linea sobre un parrafo (herramienta "Editar
         # contenido"): si editor_texto_inline no es None, hay una edicion
@@ -449,9 +452,7 @@ class EditorPDF(QMainWindow):
         else:
             self.accion_rehacer.setText("Rehacer")
 
-        documento_con_contrasena = (
-            self.documento is not None and self.documento.needs_pass
-        )
+        documento_con_contrasena = self.documento_protegido
         edicion_en_linea_abierta = self.editor_texto_inline is not None
         puede_usarlas = (
             not documento_con_contrasena and not edicion_en_linea_abierta
@@ -481,7 +482,7 @@ class EditorPDF(QMainWindow):
         if (
             self.documento is None
             or self.editor_texto_inline is not None
-            or self.documento.needs_pass
+            or self.documento_protegido
             or not self.historial.puede_deshacer()
         ):
             return
@@ -497,7 +498,7 @@ class EditorPDF(QMainWindow):
         if (
             self.documento is None
             or self.editor_texto_inline is not None
-            or self.documento.needs_pass
+            or self.documento_protegido
             or not self.historial.puede_rehacer()
         ):
             return
@@ -526,6 +527,25 @@ class EditorPDF(QMainWindow):
         )
         self.dibujar_todas_las_paginas()
         self.ir_a_pagina(self.pagina_actual)
+        self.actualizar_acciones_editar()
+
+    def _revertir_cambio_fallido(self):
+        """Restaura el documento al estado anterior a un cambio que fallo.
+
+        Se usa cuando la operacion fallo DESPUES de haber modificado el
+        PDF (por ejemplo, al escribir el texto de la edicion en linea o
+        al agregar una anotacion): ahi descartar la copia no basta,
+        porque el documento ya quedo a medias. Se deshace el cambio
+        registrado, se restaura el documento con _restaurar_documento y
+        despues se vacia la pila de Rehacer: ese "cambio" nunca existio.
+        """
+        if self.documento is None:
+            return
+        nuevo_documento = self.historial.deshacer(self.documento)
+        if nuevo_documento is None:
+            return
+        self._restaurar_documento(nuevo_documento)
+        self.historial.vaciar_rehacer()
         self.actualizar_acciones_editar()
 
     # ---------------------------------------------------------------
@@ -639,6 +659,13 @@ class EditorPDF(QMainWindow):
         self.documento = documento
         self.ruta_actual = ruta
         self.pagina_actual = 0
+        # Regla 5 del diseno: si el PDF tiene contrasena (de usuario o
+        # solo de permisos, que se abre sin pedirla), Deshacer y
+        # Rehacer quedan deshabilitados, porque la copia en memoria se
+        # guardaria sin cifrar y al guardar se perdia la contrasena.
+        self.documento_protegido = bool(
+            documento.needs_pass or documento.metadata.get("encryption")
+        )
         self.historial.vaciar()
         self.dibujar_todas_las_paginas()
         self.actualizar_acciones_editar()
@@ -799,6 +826,24 @@ class EditorPDF(QMainWindow):
 
         pagina = self.documento[numero_pagina]
 
+        # Tarea 3 del diseno: ANTES de cada cambio se registra una copia
+        # del documento; si la operacion falla o el usuario la cancela,
+        # la copia se descarta (regla 4), para que Deshacer no "deshaga"
+        # algo que nunca paso. "Editar contenido" no registra aqui: su
+        # cambio cuenta recien al ACEPTAR la edicion en linea.
+        descripcion_cambio = {
+            "Resaltar": "Resaltar",
+            "Subrayar": "Subrayar",
+            "Tachar": "Tachar",
+            "Texto libre": "Texto libre",
+            "Rectangulo": "Rectangulo",
+            "Linea": "Linea",
+            "Circulo": "Circulo",
+            "Firma (imagen)": "Firma",
+        }.get(herramienta)
+        if descripcion_cambio is not None:
+            self.registrar_cambio(descripcion_cambio)
+
         try:
             if herramienta == "Resaltar":
                 pagina.add_highlight_annot(rect_pdf)
@@ -814,10 +859,19 @@ class EditorPDF(QMainWindow):
                 pagina.add_line_annot(rect_pdf.top_left, rect_pdf.bottom_right)
             elif herramienta == "Texto libre":
                 texto, ok = QInputDialog.getText(self, "Texto libre", "Escribe el texto:")
-                if ok and texto:
-                    pagina.add_freetext_annot(rect_pdf, texto, fontsize=12)
+                if not ok or not texto:
+                    # el usuario cancelo o dejo el texto vacio: la copia
+                    # registrada no cuenta (regla 4)
+                    if descripcion_cambio is not None:
+                        self.historial.descartar_ultimo()
+                        self.actualizar_acciones_editar()
+                    return
+                pagina.add_freetext_annot(rect_pdf, texto, fontsize=12)
             elif herramienta == "Firma (imagen)":
                 if not self.ruta_firma:
+                    if descripcion_cambio is not None:
+                        self.historial.descartar_ultimo()
+                        self.actualizar_acciones_editar()
                     QMessageBox.information(
                         self, "Falta cargar la firma",
                         "Primero dale clic a 'Cargar firma...' y elige tu imagen."
@@ -834,6 +888,11 @@ class EditorPDF(QMainWindow):
             # recuadros de ESA pagina (las posiciones pudieron cambiar).
             self.refrescar_recuadros_pagina(numero_pagina)
         except Exception as error:
+            # la operacion fallo DESPUES de tocar el PDF: el documento
+            # pudo quedar a medias, asi que se revierte el cambio
+            # registrado y se vacia el rehacer (ese cambio nunca existio)
+            if descripcion_cambio is not None:
+                self._revertir_cambio_fallido()
             QMessageBox.critical(self, "No se pudo agregar la anotacion", str(error))
 
     def redibujar_pagina_individual(self, numero_pagina):
@@ -1200,6 +1259,9 @@ class EditorPDF(QMainWindow):
         if not color_nuevo.isValid():
             return
 
+        # Tarea 3 del diseno: registrar ANTES de tocar el PDF; si falla,
+        # la copia se descarta (regla 4).
+        self.registrar_cambio("Cambiar color de forma")
         try:
             # Guardamos cualquier texto que este ENCIMA de esta forma, para
             # poder volver a escribirlo despues (si no, se perderia).
@@ -1234,6 +1296,8 @@ class EditorPDF(QMainWindow):
                     fontname=fuente, color=color_texto,
                 )
         except Exception as error:
+            self.historial.descartar_ultimo()
+            self.actualizar_acciones_editar()
             QMessageBox.critical(self, "Error al cambiar el color", str(error))
 
     def editar_parrafo_encontrado(self, numero_pagina, pagina, parrafo):
@@ -1414,7 +1478,13 @@ class EditorPDF(QMainWindow):
         # PRIMERO probamos si cabe, en un documento temporal descartable,
         # SIN tocar el documento real. Solo avisa cuando ya NO queda
         # espacio libre debajo para crecer mas.
+        # Tarea 3 del diseno: el cambio "Editar texto" se registra antes
+        # de tocar el PDF; si no cabe o falla, la copia se descarta
+        # (regla 4) y el editor sigue abierto.
+        self.registrar_cambio("Editar texto")
         if not cabe_texto_con_formato(rect_destino, html, css, archivo):
+            self.historial.descartar_ultimo()
+            self.actualizar_acciones_editar()
             QMessageBox.warning(
                 self, "El texto no cabe en el cuadro",
                 "El texto no cabe ni usando todo el espacio libre debajo "
@@ -1435,6 +1505,11 @@ class EditorPDF(QMainWindow):
             # con la altura en que quedo el editor.
             insertar_texto_con_formato(pagina, rect_destino, html, css, archivo)
         except Exception as error:
+            # la operacion fallo DESPUES de tocar el PDF (redaccion ya
+            # aplicada): el documento pudo quedar a medias, asi que se
+            # revierte el cambio registrado y se vacia el rehacer (ese
+            # cambio nunca existio)
+            self._revertir_cambio_fallido()
             QMessageBox.critical(self, "Error al escribir el texto", str(error))
             return False
 
@@ -1495,34 +1570,51 @@ class EditorPDF(QMainWindow):
                     return
                 datos = dialogo_posicion.obtener_valores()
 
-                # Borramos la imagen vieja de una vez (haya elegido clic o numeros)
-                pagina.delete_image(imagen["xref"])
-                pagina.clean_contents()  # limpia referencias que ya no se usan
+                # Tarea 3 del diseno: el usuario ya decidio y no cancelo
+                # nada; se registra la copia ANTES de tocar el PDF. Si la
+                # operacion falla, la copia se descarta (regla 4).
+                self.registrar_cambio("Reemplazar imagen")
+                try:
+                    # Borramos la imagen vieja de una vez (haya elegido clic o numeros)
+                    pagina.delete_image(imagen["xref"])
+                    pagina.clean_contents()  # limpia referencias que ya no se usan
 
-                if datos["usar_clic"]:
-                    self.accion_pendiente_por_clic = lambda num_pag, punto: self.colocar_imagen_en_punto(
-                        num_pag, punto, ruta_nueva, datos["ancho"], datos["alto"], datos["mantener_proporcion"]
-                    )
-                    self.statusBar().showMessage(
-                        "Ahora da clic en la pagina donde quieras la esquina "
-                        "superior izquierda de la imagen nueva..."
-                    )
-                    return
+                    if datos["usar_clic"]:
+                        self.accion_pendiente_por_clic = lambda num_pag, punto: self.colocar_imagen_en_punto(
+                            num_pag, punto, ruta_nueva, datos["ancho"], datos["alto"], datos["mantener_proporcion"]
+                        )
+                        self.statusBar().showMessage(
+                            "Ahora da clic en la pagina donde quieras la esquina "
+                            "superior izquierda de la imagen nueva..."
+                        )
+                        return
 
-                nuevo_rect = fitz.Rect(
-                    datos["x"], datos["y"],
-                    datos["x"] + datos["ancho"], datos["y"] + datos["alto"],
-                )
-                pagina.insert_image(
-                    nuevo_rect, filename=ruta_nueva,
-                    keep_proportion=datos["mantener_proporcion"],
-                )
+                    nuevo_rect = fitz.Rect(
+                        datos["x"], datos["y"],
+                        datos["x"] + datos["ancho"], datos["y"] + datos["alto"],
+                    )
+                    pagina.insert_image(
+                        nuevo_rect, filename=ruta_nueva,
+                        keep_proportion=datos["mantener_proporcion"],
+                    )
+                except Exception:
+                    self.historial.descartar_ultimo()
+                    self.actualizar_acciones_editar()
+                    raise
             elif texto_boton == "Eliminar imagen":
                 respuesta = QMessageBox.question(self, "Confirmar", "¿Eliminar esta imagen del documento?")
                 if respuesta != QMessageBox.Yes:
                     return
-                pagina.delete_image(imagen["xref"])
-                pagina.clean_contents()  # limpia referencias que ya no se usan
+                # Tarea 3 del diseno: copia registrada antes del borrado;
+                # si falla, se descarta (regla 4).
+                self.registrar_cambio("Eliminar imagen")
+                try:
+                    pagina.delete_image(imagen["xref"])
+                    pagina.clean_contents()  # limpia referencias que ya no se usan
+                except Exception:
+                    self.historial.descartar_ultimo()
+                    self.actualizar_acciones_editar()
+                    raise
             else:
                 return  # Cancelar
         except Exception as error:
@@ -1550,6 +1642,7 @@ class EditorPDF(QMainWindow):
     def rotar_pagina(self):
         if self.documento is None:
             return
+        self.registrar_cambio("Rotar pagina")
         pagina = self.documento[self.pagina_actual]
         pagina.set_rotation((pagina.rotation + 90) % 360)
         self.dibujar_todas_las_paginas()
@@ -1565,6 +1658,9 @@ class EditorPDF(QMainWindow):
             self, "Confirmar", f"¿Eliminar la pagina {self.pagina_actual + 1}?"
         )
         if respuesta == QMessageBox.Yes:
+            # Tarea 3 del diseno: registrar despues de confirmar, antes
+            # de borrar (si el usuario cancela, no queda copia de mas).
+            self.registrar_cambio("Eliminar pagina")
             self.documento.delete_page(self.pagina_actual)
             self.dibujar_todas_las_paginas()
             self.ir_a_pagina(self.pagina_actual)
@@ -1572,6 +1668,7 @@ class EditorPDF(QMainWindow):
     def insertar_pagina_blanco(self):
         if self.documento is None:
             return
+        self.registrar_cambio("Insertar pagina")
         self.documento.new_page(pno=self.pagina_actual + 1)
         self.pagina_actual += 1
         self.dibujar_todas_las_paginas()
@@ -1588,6 +1685,9 @@ class EditorPDF(QMainWindow):
         dialogo = DialogoReordenarPaginas(self.documento, parent=self)
         if dialogo.exec() == QDialog.Accepted:
             nuevo_orden = dialogo.obtener_nuevo_orden()
+            # Tarea 3 del diseno: el usuario acepto el nuevo orden; se
+            # registra la copia ANTES de reconstruir el documento.
+            self.registrar_cambio("Reordenar paginas")
             try:
                 # Document.select() reconstruye el documento dejando SOLO las
                 # paginas de esa lista, y EN ESE ORDEN. Como pasamos todas las
@@ -1598,6 +1698,8 @@ class EditorPDF(QMainWindow):
                 self.ir_a_pagina(0)
                 QMessageBox.information(self, "Listo", "Orden aplicado. Recuerda usar 'Guardar como' para conservarlo.")
             except Exception as error:
+                self.historial.descartar_ultimo()
+                self.actualizar_acciones_editar()
                 QMessageBox.critical(self, "Error al reordenar", str(error))
 
     # ---------------------------------------------------------------
@@ -1671,6 +1773,7 @@ class EditorPDF(QMainWindow):
         self.documento = None
         self.ruta_actual = None
         self.pagina_actual = 0
+        self.documento_protegido = False
         # Cerrar el documento vacia el historial (regla 2 del diseno)
         self.historial.vaciar()
         self.dibujar_todas_las_paginas()  # como documento es None, esto deja el panel vacio

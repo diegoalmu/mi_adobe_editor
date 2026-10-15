@@ -187,6 +187,32 @@ def test_descartar_ultimo_quita_la_copia_del_cambio_cancelado():
         documento.close()
 
 
+def test_vaciar_rehacer_borra_solo_el_rehacer():
+    """vaciar_rehacer borra la pila de Rehacer y deja la de Deshacer."""
+    documento = _documento_texto()
+    try:
+        historial = HistorialCambios()
+        historial.registrar(documento, "cambio 1")
+        _agregar_linea(documento, "linea uno")
+        historial.registrar(documento, "cambio 2")
+        _agregar_linea(documento, "linea dos")
+
+        # un deshacer deja 1 copia en cada pila
+        deshecho = historial.deshacer(documento)
+        assert deshecho is not None
+        assert historial.puede_deshacer()
+        assert historial.puede_rehacer()
+
+        historial.vaciar_rehacer()
+        assert not historial.puede_rehacer()
+        assert historial.descripcion_rehacer() is None
+        # el Deshacer no se toca
+        assert historial.descripcion_deshacer() == "cambio 1"
+        deshecho.close()
+    finally:
+        documento.close()
+
+
 def test_descripciones_de_deshacer_y_rehacer():
     """Las descripciones dicen que se va a deshacer y que se va a rehacer."""
     documento = _documento_texto()

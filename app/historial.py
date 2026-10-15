@@ -137,6 +137,15 @@ class HistorialCambios:
         self._pila_deshacer.clear()
         self._pila_rehacer.clear()
 
+    def vaciar_rehacer(self):
+        """Borra solo la pila de Rehacer, dejando la de Deshacer.
+
+        Se usa cuando un cambio fallo DESPUES de modificar el documento:
+        se revierte con `deshacer`, y luego este metodo borra el estado
+        fallido que quedo en Rehacer, porque ese "cambio" nunca existio.
+        """
+        self._pila_rehacer.clear()
+
     # -----------------------------------------------------------------
     # LIMITES DE MEMORIA
     # -----------------------------------------------------------------

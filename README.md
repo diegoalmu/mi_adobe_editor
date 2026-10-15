@@ -16,6 +16,7 @@ un programa de escritorio (Windows y Linux) capaz de:
   párrafo → cuadro editable con barra de formato; ver [DISENO_EDITOR_TEXTO.md](DISENO_EDITOR_TEXTO.md))
 - [x] Agregar texto nuevo, formas, y firma por imagen
 - [x] Resaltar, subrayar, tachar
+- [x] Deshacer y Rehacer (Ctrl+Z / Ctrl+Y, menú Editar, hasta 20 pasos)
 - [ ] Comentar (notas tipo "sticky note")
 - [x] Unir, dividir, reordenar (arrastrar o botones), rotar y eliminar páginas
 - [ ] Rellenar y crear formularios PDF
@@ -33,9 +34,20 @@ Fases 1 a 4 del [ROADMAP](ROADMAP.md) completadas y funcionando (visor, anotacio
 gestión de páginas y edición de contenido real). La **edición de texto tipo Word**
 está terminada y validada (plan [DISENO_EDITOR_TEXTO.md](DISENO_EDITOR_TEXTO.md),
 Tareas 0–6): clic sobre un párrafo → cuadro editable en línea con barra de formato
-(tipografía, tamaño, negrita/cursiva/subrayado, color), sin abrir ventanas. El
+(tipografía, tamaño, negrita/cursiva/subrayado, color), sin abrir ventanas. También
+está terminado el **Deshacer y Rehacer** (plan [DISENO_DESHACER.md](DISENO_DESHACER.md),
+Tareas 1–4): menú Editar con Ctrl+Z / Ctrl+Y, que muestra qué se va a deshacer
+("Deshacer: Rotar página") y registra cada cambio real del documento. El
 programa ya está **empaquetado
 y probado como aplicación de escritorio en Linux** (ver [EMPAQUETADO.md](EMPAQUETADO.md)).
+
+#### ↩️ Limitaciones conocidas del Deshacer/Rehacer
+
+1. Máximo **20 pasos** y **300 MB** en total entre las copias en memoria; si se
+   pasa, se descartan los pasos más antiguos.
+2. Queda **deshabilitado** en PDFs con contraseña (de usuario o de permisos):
+   las copias en memoria se guardarían sin cifrar y al guardar se perdería la
+   contraseña del archivo.
 
 #### ✏️ Limitaciones conocidas de la edición de texto
 
