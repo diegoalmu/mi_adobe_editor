@@ -1160,6 +1160,64 @@ Fase 8 y el diseño) refleja la función terminada y sus limitaciones.
 
 ---
 
+## Sesión 20 — 2026-10-15
+
+**Objetivo de la sesión:** Terminar la corrección de la sesión 19
+("revertir si el fallo ocurre después de tocar el PDF") aplicándola a
+las operaciones que aún usaban `descartar_ultimo()` en ese caso:
+`editar_forma`, `editar_imagen` (reemplazar y eliminar) y
+`reordenar_paginas`, con su prueba.
+
+**Actividades realizadas:**
+
+1. **`app/main.py` — los 4 `except` que podían fallar después de
+   modificar el PDF ahora llaman a `_revertir_cambio_fallido()`** (en
+   vez de `historial.descartar_ultimo()` + `actualizar_acciones_editar()`,
+   que `_revertir_cambio_fallido` ya hace por dentro):
+   - `editar_forma` (líneas 1298–1303): el `try` cubre
+     `add_redact_annot`/`apply_redactions`/`insert_text`, ya con la
+     redacción aplicada.
+   - `editar_imagen` – reemplazar (líneas 1603–1608): el `try` empieza
+     después de `delete_image` + `clean_contents`, es decir con la
+     imagen vieja ya borrada; el error se vuelve a lanzar y lo captura
+     el `except` general de `editar_imagen`.
+   - `editar_imagen` – eliminar (líneas 1620–1624): mismo caso.
+   - `reordenar_paginas` (líneas 1707–1712): `documento.select()` ya
+     reconstruyó el documento.
+   - Los comentarios de al lado (líneas 1262–1263, 1573–1576 y
+     1613–1615) se actualizaron para no decir ya "la copia se descarta".
+   - **Siguen con `descartar_ultimo()` los cancelar antes de tocar el
+     PDF**, como debe ser: diálogo de texto libre cancelado (línea 866),
+     firma sin cargar (línea 873) y texto que no cabe (línea 1488).
+2. **`tests/test_deshacer.py`:** ayuda `_documento_con_imagen` (líneas
+   35–42, PDF con una imagen roja pegada) y `_color_en_pagina` (líneas
+   62–66, color del píxel de la página en un punto PDF); import de
+   `QDialog` y `QFileDialog` (línea 16). Nueva prueba
+   `test_fallo_al_reemplazar_imagen_revuelve_el_documento` (líneas
+   333–398): con `monkeypatch` de los diálogos, la imagen "elegida" es
+   un archivo que no se puede decodificar, así que `insert_image` falla
+   *después* de que `delete_image` borró la imagen vieja. Se verifica que
+   el píxel vuelve a ser rojo (255, 0, 0) — con `descartar_ultimo()`
+   quedaba blanco (255, 255, 255), o sea que la prueba atrapa el bug —
+   y que no queda nada ni para deshacer ni para rehacer.
+3. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums de Qt y `PDF_ENCRYPT_AES_256`), 0 errores nuevos;
+   **pytest** → 36/36 en verde (1 nueva).
+
+**Resultado:** Si `editar_forma`, `editar_imagen` o `reordenar_paginas`
+fallan después de haber modificado el PDF, el documento entero se
+revierte al estado anterior y el cambio fallido no queda ni en Deshacer
+ni en Rehacer; los diálogos cancelados antes de tocar el PDF siguen
+deshaciendo solo la copia registrada.
+
+**Pendiente:**
+- Validación visual de Diego: en "Editar contenido", cambiar el color
+  de una forma y reemplazar/eliminar una imagen en un PDF real,
+  simulando un fallo (o usando un PDF raro) y confirmando que la forma
+  o la imagen original regresan solas.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

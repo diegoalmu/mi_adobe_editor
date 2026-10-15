@@ -1259,8 +1259,8 @@ class EditorPDF(QMainWindow):
         if not color_nuevo.isValid():
             return
 
-        # Tarea 3 del diseno: registrar ANTES de tocar el PDF; si falla,
-        # la copia se descarta (regla 4).
+        # Tarea 3 del diseno: registrar ANTES de tocar el PDF; si el
+        # cambio falla despues de aplicarse, se revierte el documento.
         self.registrar_cambio("Cambiar color de forma")
         try:
             # Guardamos cualquier texto que este ENCIMA de esta forma, para
@@ -1296,8 +1296,10 @@ class EditorPDF(QMainWindow):
                     fontname=fuente, color=color_texto,
                 )
         except Exception as error:
-            self.historial.descartar_ultimo()
-            self.actualizar_acciones_editar()
+            # el fallo pudo ocurrir DESPUES de aplicar la redaccion: el
+            # documento quedo a medias, asi que se revierte el cambio
+            # registrado y se vacia el rehacer (ese cambio nunca existio)
+            self._revertir_cambio_fallido()
             QMessageBox.critical(self, "Error al cambiar el color", str(error))
 
     def editar_parrafo_encontrado(self, numero_pagina, pagina, parrafo):
@@ -1572,7 +1574,8 @@ class EditorPDF(QMainWindow):
 
                 # Tarea 3 del diseno: el usuario ya decidio y no cancelo
                 # nada; se registra la copia ANTES de tocar el PDF. Si la
-                # operacion falla, la copia se descarta (regla 4).
+                # operacion falla despues de borrar la imagen vieja, se
+                # revierte el documento completo (regla 4).
                 self.registrar_cambio("Reemplazar imagen")
                 try:
                     # Borramos la imagen vieja de una vez (haya elegido clic o numeros)
@@ -1598,22 +1601,26 @@ class EditorPDF(QMainWindow):
                         keep_proportion=datos["mantener_proporcion"],
                     )
                 except Exception:
-                    self.historial.descartar_ultimo()
-                    self.actualizar_acciones_editar()
+                    # el fallo ocurrio DESPUES de borrar la imagen vieja
+                    # (el documento quedo sin ella): se revierte el cambio
+                    # registrado y se vacia el rehacer antes de re-lanzar
+                    self._revertir_cambio_fallido()
                     raise
             elif texto_boton == "Eliminar imagen":
                 respuesta = QMessageBox.question(self, "Confirmar", "¿Eliminar esta imagen del documento?")
                 if respuesta != QMessageBox.Yes:
                     return
                 # Tarea 3 del diseno: copia registrada antes del borrado;
-                # si falla, se descarta (regla 4).
+                # si el borrado falla a medias, se revierte el documento
+                # (regla 4).
                 self.registrar_cambio("Eliminar imagen")
                 try:
                     pagina.delete_image(imagen["xref"])
                     pagina.clean_contents()  # limpia referencias que ya no se usan
                 except Exception:
-                    self.historial.descartar_ultimo()
-                    self.actualizar_acciones_editar()
+                    # el borrado pudo quedar a medias: se revierte el
+                    # cambio registrado y se vacia el rehacer
+                    self._revertir_cambio_fallido()
                     raise
             else:
                 return  # Cancelar
@@ -1698,8 +1705,10 @@ class EditorPDF(QMainWindow):
                 self.ir_a_pagina(0)
                 QMessageBox.information(self, "Listo", "Orden aplicado. Recuerda usar 'Guardar como' para conservarlo.")
             except Exception as error:
-                self.historial.descartar_ultimo()
-                self.actualizar_acciones_editar()
+                # select() pudo dejar el documento a medias: se revierte
+                # el cambio registrado y se vacia el rehacer (ese cambio
+                # nunca existio)
+                self._revertir_cambio_fallido()
                 QMessageBox.critical(self, "Error al reordenar", str(error))
 
     # ---------------------------------------------------------------
