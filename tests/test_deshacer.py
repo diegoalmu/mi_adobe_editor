@@ -13,7 +13,9 @@ dialogo no deja una copia de mas en el historial.
 
 import fitz
 from PySide6.QtCore import QRect
-from PySide6.QtWidgets import QApplication, QInputDialog, QMessageBox
+from PySide6.QtWidgets import (
+    QApplication, QDialog, QFileDialog, QInputDialog, QMessageBox,
+)
 
 import main as modulo_main
 from main import EditorPDF
@@ -27,6 +29,16 @@ def _documento_pdf():
     documento = fitz.open()
     pagina = documento.new_page(width=595, height=842)
     pagina.insert_text((72, 100), "uno dos tres", fontsize=12, fontname="helv")
+    return documento
+
+
+def _documento_con_imagen():
+    """PDF en memoria con una pagina que tiene una imagen pegada."""
+    documento = fitz.open()
+    pagina = documento.new_page(width=595, height=842)
+    pixeles = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 8, 8))
+    pixeles.set_rect(pixeles.irect, (255, 0, 0))
+    pagina.insert_image(fitz.Rect(72, 72, 172, 172), pixmap=pixeles)
     return documento
 
 
@@ -45,6 +57,14 @@ def _documento_de(ventana):
 def _pagina_de(ventana, numero=0):
     """Una pagina del documento de la ventana."""
     return _documento_de(ventana).load_page(numero)
+
+
+def _color_en_pagina(pagina, x, y):
+    """Color RGB del pixel de la pagina en el punto (x, y) en puntos PDF."""
+    pixeles = pagina.get_pixmap(
+        matrix=fitz.Matrix(1, 1), clip=fitz.Rect(x, y, x + 1, y + 1)
+    )
+    return tuple(pixeles.pixel(0, 0))[:3]
 
 
 def _texto_de_pagina(pagina):
@@ -302,6 +322,73 @@ def test_fallo_al_escribir_texto_revuelve_el_documento(monkeypatch):
         texto = _texto_de_pagina(_pagina_de(ventana))
         assert "uno dos tres" in texto
         assert "texto nuevo" not in texto
+        # el cambio fallido nunca existio: no queda ni deshacer ni rehacer
+        assert not ventana.historial.puede_deshacer()
+        assert not ventana.historial.puede_rehacer()
+    finally:
+        _cerrar_documento_de(ventana)
+        ventana.close()
+
+
+def test_fallo_al_reemplazar_imagen_revuelve_el_documento(tmp_path, monkeypatch):
+    """Si editar_imagen falla despues de borrar la imagen, la original sigue.
+
+    Se simula el fallo con una imagen nueva que el programa no puede abrir
+    (el archivo existe pero no es una imagen): el borrado de la imagen
+    vieja ya toco la pagina (queda en blanco), asi que descartar la copia
+    no basta. _revertir_cambio_fallido deshace el cambio registrado y el
+    documento vuelve al estado original (con la imagen roja visible otra
+    vez), sin dejar nada ni para deshacer ni para rehacer.
+    """
+
+    class _BotonFalso:
+        def text(self):
+            return "Reemplazar imagen..."
+
+    # la imagen "elegida" no se puede decodificar: insert_image falla
+    ruta_mala = tmp_path / "falsa_imagen.png"
+    ruta_mala.write_text("esto no es una imagen", encoding="utf-8")
+
+    monkeypatch.setattr(QMessageBox, "exec", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(
+        QMessageBox, "clickedButton",
+        lambda *args, **kwargs: _BotonFalso(),
+    )
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileName",
+        lambda *args, **kwargs: (str(ruta_mala), ""),
+    )
+    monkeypatch.setattr(
+        modulo_main.DialogoPosicionarImagen, "exec",
+        lambda *args, **kwargs: QDialog.DialogCode.Accepted,
+    )
+    monkeypatch.setattr(
+        modulo_main.DialogoPosicionarImagen, "obtener_valores",
+        lambda *args, **kwargs: {
+            "x": 72.0, "y": 200.0, "ancho": 50.0, "alto": 50.0,
+            "mantener_proporcion": True, "usar_clic": False,
+        },
+    )
+    monkeypatch.setattr(
+        QMessageBox, "critical",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
+    )
+
+    ventana = EditorPDF()
+    try:
+        ventana.cargar_documento(_documento_con_imagen(), None)
+        imagenes = ventana.obtener_todas_las_imagenes(_pagina_de(ventana))
+        assert len(imagenes) == 1
+        # la imagen roja se ve en la pagina antes de reemplazarla
+        assert _color_en_pagina(_pagina_de(ventana), 100, 100) == (255, 0, 0)
+
+        # reemplazar falla al abrir la imagen nueva, cuando la vieja ya
+        # se borro de la pagina
+        ventana.editar_imagen(_pagina_de(ventana), imagenes[0])
+
+        # el documento se revirtio: la imagen original sigue visible
+        pagina_tras_el_fallo = _pagina_de(ventana)
+        assert _color_en_pagina(pagina_tras_el_fallo, 100, 100) == (255, 0, 0)
         # el cambio fallido nunca existio: no queda ni deshacer ni rehacer
         assert not ventana.historial.puede_deshacer()
         assert not ventana.historial.puede_rehacer()
