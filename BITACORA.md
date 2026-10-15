@@ -1218,6 +1218,60 @@ deshaciendo solo la copia registrada.
 
 ---
 
+## Sesión 21 — 2026-10-15
+
+**Objetivo de la sesión:** Empezar la Fase 5 (llenar formularios PDF)
+con la Tarea 1 del diseño `DISENO_FORMULARIOS.md`: el módulo
+`app/formularios.py` para leer los campos que ya trae un PDF.
+
+**Actividades realizadas:**
+
+1. **`AGENTS.md`:** la línea "Plan vigente" ahora apunta a
+   `DISENO_FORMULARIOS.md` (antes decía `DISENO_DESHACER.md`).
+2. **`app/formularios.py` (nuevo):** funciones puras sobre PyMuPDF,
+   sin ventanas:
+   - `listar_campos(documento)` (líneas 39–76): recorre las páginas con
+     `pagina.widgets()`, traduce cada tipo de PyMuPDF al nombre del
+     diseño (`"texto"`, `"casilla"`, `"opcion"`, `"lista"`, `"firma"`)
+     y devuelve un diccionario por campo con `nombre`, `tipo`, `valor`,
+     `opciones`, `solo_lectura`, `multilinea`, `paginas`, `rects` y
+     `xrefs`. Los botones de opción que comparten nombre se agrupan en
+     un solo campo (páginas/rects/xrefs por cada botón, opciones = el
+     estado encendido de cada uno); los botones de acción no se listan.
+   - `tiene_formulario(documento)` (líneas 79–81): `True` si hay al
+     menos un campo listable.
+   - `es_solo_xfa(documento)` (líneas 84–91): `True` si el AcroForm
+     declara XFA y no hay campos normales (detecta XFA con
+     `xref_get_key`, tanto si el AcroForm es objeto indirecto como si
+     está escrito en el catálogo).
+   - Banderas: solo lectura = `PDF_FIELD_IS_READ_ONLY` (bit 0) y
+     multilínea = `PDF_TX_FIELD_IS_MULTILINE` (bit 13).
+3. **`tests/test_formularios.py` (nuevo):** 7 pruebas que crean sus
+   PDFs en memoria con `fitz.Widget()` + `pagina.add_widget()`:
+   tipos/valores/opciones de cada campo, grupo de opción como un solo
+   campo con estados "Si"/"No" (se renombra el estado "Yes" que crea
+   PyMuPDF para simular grupos reales), multilínea y solo lectura,
+   páginas/rects/xrefs contra el widget real, PDF sin campos →
+   `tiene_formulario` es `False`, y detección de XFA (solo XFA →
+   `True`; con campos normales o sin XFA → `False`).
+4. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt y `PDF_ENCRYPT_AES_256`), 0 errores
+   nuevos; **pytest** → 43/43 en verde (7 nuevas). Para que pyright no
+   marcara cosas nuevas, las constantes de PyMuPDF se importan de
+   `pymupdf.mupdf` (donde están declaradas) y en las pruebas las
+   propiedades del widget se asignan con `setattr` en un solo
+   ayudante.
+
+**Resultado:** El programa ya puede leer los campos de un formulario
+PDF (texto, casillas, grupos de opción, listas y firmas) y detectar los
+formularios XFA que no se pueden llenar; esto es la base del panel de
+las tareas 2 a 4.
+
+**Pendiente:**
+- Tarea 2: `escribir_valor(documento, campo, valor)` con sus pruebas.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
