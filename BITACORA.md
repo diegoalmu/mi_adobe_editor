@@ -959,6 +959,72 @@ menú Editar de `main.py`.
 
 ---
 
+## Sesión 17 — 2026-10-14
+
+**Objetivo de la sesión:** Tarea 2 del plan `DISENO_DESHACER.md`
+(conectar `HistorialCambios` a `EditorPDF` con el menú Editar) más una
+corrección pedida por Diego en `app/historial.py`: el límite de bytes
+debe conservar siempre la copia más reciente, para que un PDF que por
+sí solo pese más que `limite_bytes` aún se pueda deshacer un paso.
+
+**Actividades realizadas:**
+
+1. **Corrección en `app/historial.py` (`_aplicar_limites`, líneas
+   144–162):** el ciclo del límite de bytes ahora exige
+   `len(self._pila_deshacer) > 1` antes de descartar, así que nunca se
+   elimina la última copia. Nueva prueba
+   `test_limite_de_bytes_conserva_la_copia_mas_reciente` en
+   `tests/test_historial.py` (líneas 144–164): con `limite_bytes=10`
+   (mucho menor que una sola copia) aun queda un deshacer posible.
+2. **`app/main.py`:**
+   - Imports: `QKeySequence` en QtGui (línea 41) y
+     `from historial import HistorialCambios` (línea 53).
+   - `__init__` (línea 321): `self.historial = HistorialCambios()`.
+   - `crear_menu_archivo` (línea 376) llama a `crear_menu_editar()`
+     entre los menús Archivo y Páginas.
+   - `crear_menu_editar` (línea 407): acciones "Deshacer" y "Rehacer"
+     con `QKeySequence.StandardKey.Undo` y `QKeySequence.StandardKey.Redo`,
+     arrancan deshabilitadas.
+   - `actualizar_acciones_editar` (línea 428): el texto lleva la
+     descripción ("Deshacer: Rotar página"); se deshabilitan sin nada
+     en el historial, con PDF protegido (`needs_pass`, regla 5) o con
+     edición en línea abierta (regla 6). Se llama también al abrir y
+     cerrar edición en línea (líneas 1342 y 1462).
+   - `registrar_cambio(descripcion)` (línea 466), `deshacer_cambio`
+     (línea 479), `rehacer_cambio` (línea 495) y
+     `_restaurar_documento` (línea 511): reemplaza `self.documento`,
+     conserva `pagina_actual` (ajustada), redibuja todo (los recuadros
+     de "Editar contenido" los redibuja `dibujar_todas_las_paginas`) y
+     muestra "Deshecho: …" / "Rehecho: …" en la barra de estado.
+   - `abrir_pdf` ahora llama a `cargar_documento(documento, ruta)`
+     (línea 633), que vacía el historial (regla 2); `cerrar_documento`
+     también lo vacía (líneas 1675 y 1684).
+3. **`tests/test_deshacer.py` (nuevo, 105 líneas, offscreen):** las 3
+   pruebas que pide el diseño: rotar con `registrar_cambio` y deshacer
+   → rotación 0, rehacer → rotación 90; abrir otro documento vacía el
+   historial y apaga las acciones; PDF con contraseña
+   (`fitz.PDF_ENCRYPT_AES_256`) deja las acciones deshabilitadas.
+4. **Verificación:** **pyright** → mismos 38 ruidos conocidos de
+   `app/main.py` + 1 del mismo tipo (`PDF_ENCRYPT_AES_256` no
+   "conocido" en `fitz`, ruido documentado en AGENTS.md) en
+   `test_deshacer.py:88`, 0 errores reales nuevos; **pytest** → 28/28
+   en verde (las 4 nuevas: 1 de historial + 3 de deshacer).
+
+**Resultado:** El Deshacer/Rehacer ya está conectado a la ventana: menú
+Editar entre Archivo y Páginas con Ctrl+Z / Ctrl+Y, descripción de lo
+que se deshace, deshabilitado con PDF protegido o edición en línea
+abierta, y el historial se vacía al abrir o cerrar un documento. La
+corrección del límite de bytes garantiza al menos un paso de deshacer
+aunque el PDF pese más que `limite_bytes`.
+
+**Pendiente:**
+- Tarea 3 del plan: llamar `registrar_cambio(...)` antes de cada
+  operación de la tabla "Qué cuenta como cambio" y
+  `historial.descartar_ultimo()` si algo falla o se cancela, con su
+  validación visual de Diego (4 cambios, deshacer 4, rehacer 2).
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

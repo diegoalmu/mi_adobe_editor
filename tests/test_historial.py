@@ -141,6 +141,28 @@ def test_limite_de_bytes_descarta_las_copias_antiguas():
         documento_3.close()
 
 
+def test_limite_de_bytes_conserva_la_copia_mas_reciente():
+    """Un documento mas grande que limite_bytes aun se puede deshacer un paso."""
+    documento = _documento_texto()
+    try:
+        # el limite es mucho menor que una sola copia del documento
+        historial = HistorialCambios(limite_bytes=10)
+        historial.registrar(documento, "cambio 1")
+        _agregar_linea(documento, "linea uno")
+        historial.registrar(documento, "cambio 2")
+
+        # la copia mas reciente nunca se descarta: se puede deshacer 1 vez
+        assert historial.puede_deshacer()
+        assert historial.descripcion_deshacer() == "cambio 2"
+        deshecho = historial.deshacer(documento)
+        assert deshecho is not None
+        assert not historial.puede_deshacer()
+        assert historial.deshacer(deshecho) is None
+        deshecho.close()
+    finally:
+        documento.close()
+
+
 def test_descartar_ultimo_quita_la_copia_del_cambio_cancelado():
     """descartar_ultimo quita la ultima copia (operacion que fallo o se cancelo)."""
     documento = _documento_texto()

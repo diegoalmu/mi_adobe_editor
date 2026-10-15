@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import (
     QPixmap, QImage, QAction, QIcon, QColor, QPainter, QPen,
-    QFont, QTextCharFormat, QTextCursor,
+    QFont, QTextCharFormat, QTextCursor, QKeySequence,
 )
 from PySide6.QtCore import Qt, QRect, QSize, Signal, QTranslator, QLibraryInfo, QLocale
 
@@ -50,6 +50,7 @@ from formato_html import (
     CARPETA_FUENTES_WINDOWS, cabe_texto_con_formato, css_tipografias,
     fragmentos_a_html, insertar_texto_con_formato, tipografias_disponibles,
 )
+from historial import HistorialCambios
 
 
 # =========================================================================
@@ -315,6 +316,10 @@ class EditorPDF(QMainWindow):
         self.etiquetas_paginas = []      # lista de EtiquetaPDF, una por pagina
         self.offsets_top = []            # posicion vertical (en pixeles) donde empieza cada pagina
 
+        # Historial de Deshacer/Rehacer (DISENO_DESHACER.md): copias del
+        # documento en memoria, vaciadas al abrir o cerrar un PDF.
+        self.historial = HistorialCambios()
+
         # Edicion de texto en linea sobre un parrafo (herramienta "Editar
         # contenido"): si editor_texto_inline no es None, hay una edicion
         # activa y los demas controles no deben tocar la pagina.
@@ -367,6 +372,9 @@ class EditorPDF(QMainWindow):
         menu_archivo.addSeparator()
         self.agregar_a_menu(menu_archivo, "Salir del programa", self.close)
 
+        # El menu Editar va ENTRE Archivo y Paginas (DISENO_DESHACER.md)
+        self.crear_menu_editar()
+
         menu_paginas = self.menuBar().addMenu("Paginas")
         self.agregar_a_menu(menu_paginas, "Rotar pagina actual", self.rotar_pagina)
         self.agregar_a_menu(menu_paginas, "Eliminar pagina actual", self.eliminar_pagina)
@@ -391,6 +399,134 @@ class EditorPDF(QMainWindow):
         accion.triggered.connect(funcion)
         menu.addAction(accion)
         return accion
+
+    # ---------------------------------------------------------------
+    # MENU EDITAR: DESHACER Y REHACER (DISENO_DESHACER.md)
+    # ---------------------------------------------------------------
+
+    def crear_menu_editar(self):
+        """Crea el menu Editar con las acciones Deshacer y Rehacer.
+
+        Ambas arrancan deshabilitadas: no hay nada que deshacer hasta
+        que se registre un cambio. Los atajos son los de todo el
+        sistema (Ctrl+Z y Ctrl+Y).
+        """
+        menu_editar = self.menuBar().addMenu("Editar")
+
+        self.accion_deshacer = QAction("Deshacer", self)
+        self.accion_deshacer.setShortcut(QKeySequence.StandardKey.Undo)
+        self.accion_deshacer.triggered.connect(self.deshacer_cambio)
+        self.accion_deshacer.setEnabled(False)
+        menu_editar.addAction(self.accion_deshacer)
+
+        self.accion_rehacer = QAction("Rehacer", self)
+        self.accion_rehacer.setShortcut(QKeySequence.StandardKey.Redo)
+        self.accion_rehacer.triggered.connect(self.rehacer_cambio)
+        self.accion_rehacer.setEnabled(False)
+        menu_editar.addAction(self.accion_rehacer)
+
+    def actualizar_acciones_editar(self):
+        """Pone la descripcion en el menu y habilita o apaga las acciones.
+
+        El texto de cada accion dice que se va a deshacer o rehacer
+        ("Deshacer: Rotar pagina"). Quedan deshabilitadas cuando no hay
+        nada en el historial, cuando el documento tiene contrasena
+        (regla 5: la copia en memoria se guarda sin cifrar) o cuando
+        hay una edicion de texto en linea abierta (regla 6: ahi Ctrl+Z
+        lo maneja el cuadro de texto con el comportamiento de Qt).
+        """
+        if self.historial.puede_deshacer():
+            self.accion_deshacer.setText(
+                f"Deshacer: {self.historial.descripcion_deshacer()}"
+            )
+        else:
+            self.accion_deshacer.setText("Deshacer")
+
+        if self.historial.puede_rehacer():
+            self.accion_rehacer.setText(
+                f"Rehacer: {self.historial.descripcion_rehacer()}"
+            )
+        else:
+            self.accion_rehacer.setText("Rehacer")
+
+        documento_con_contrasena = (
+            self.documento is not None and self.documento.needs_pass
+        )
+        edicion_en_linea_abierta = self.editor_texto_inline is not None
+        puede_usarlas = (
+            not documento_con_contrasena and not edicion_en_linea_abierta
+        )
+        self.accion_deshacer.setEnabled(
+            puede_usarlas and self.historial.puede_deshacer()
+        )
+        self.accion_rehacer.setEnabled(
+            puede_usarlas and self.historial.puede_rehacer()
+        )
+
+    def registrar_cambio(self, descripcion):
+        """Guarda una copia del documento ANTES de aplicar un cambio.
+
+        Lo llaman las operaciones que modifican el documento abierto
+        (Tarea 3 del diseno). Si la operacion falla o el usuario la
+        cancela, se quita la copia con `self.historial.descartar_ultimo()`
+        para que Deshacer no "deshaga" algo que nunca paso (regla 4).
+        """
+        if self.documento is None:
+            return
+        self.historial.registrar(self.documento, descripcion)
+        self.actualizar_acciones_editar()
+
+    def deshacer_cambio(self):
+        """Regresa el documento al estado anterior al ultimo cambio (Ctrl+Z)."""
+        if (
+            self.documento is None
+            or self.editor_texto_inline is not None
+            or self.documento.needs_pass
+            or not self.historial.puede_deshacer()
+        ):
+            return
+        descripcion = self.historial.descripcion_deshacer()
+        nuevo_documento = self.historial.deshacer(self.documento)
+        if nuevo_documento is None:
+            return
+        self._restaurar_documento(nuevo_documento)
+        self.statusBar().showMessage(f"Deshecho: {descripcion}", 5000)
+
+    def rehacer_cambio(self):
+        """Vuelve a aplicar el ultimo cambio deshecho (Ctrl+Y)."""
+        if (
+            self.documento is None
+            or self.editor_texto_inline is not None
+            or self.documento.needs_pass
+            or not self.historial.puede_rehacer()
+        ):
+            return
+        descripcion = self.historial.descripcion_rehacer()
+        nuevo_documento = self.historial.rehacer(self.documento)
+        if nuevo_documento is None:
+            return
+        self._restaurar_documento(nuevo_documento)
+        self.statusBar().showMessage(f"Rehecho: {descripcion}", 5000)
+
+    def _restaurar_documento(self, nuevo_documento):
+        """Reemplaza el documento por uno restaurado y redibuja todo.
+
+        Se usa al deshacer y al rehacer: se cierra el documento actual,
+        se conserva la pagina visible (ajustada si ya no existe), se
+        redibujan todas las paginas y, si la herramienta "Editar
+        contenido" esta activa, se vuelven a dibujar los recuadros
+        (lo hace dibujar_todas_las_paginas).
+        """
+        self.cancelar_edicion_texto()
+        if self.documento is not None:
+            self.documento.close()
+        self.documento = nuevo_documento
+        self.pagina_actual = max(
+            0, min(self.pagina_actual, len(self.documento) - 1)
+        )
+        self.dibujar_todas_las_paginas()
+        self.ir_a_pagina(self.pagina_actual)
+        self.actualizar_acciones_editar()
 
     # ---------------------------------------------------------------
     # BARRA DE HERRAMIENTAS (solo lo de uso constante: zoom, pagina, herramienta activa)
@@ -490,12 +626,22 @@ class EditorPDF(QMainWindow):
                     QMessageBox.critical(self, "Error", "Contrasena incorrecta o cancelada.")
                     return
 
-            self.documento = documento
-            self.ruta_actual = ruta_archivo
-            self.pagina_actual = 0
-            self.dibujar_todas_las_paginas()
+            self.cargar_documento(documento, ruta_archivo)
         except Exception as error:
             QMessageBox.critical(self, "Error al abrir el archivo", str(error))
+
+    def cargar_documento(self, documento, ruta):
+        """Muestra un documento ya abierto en el visor.
+
+        Vacia el historial de Deshacer/Rehacer (regla 2 del diseno:
+        abrir otro documento empieza el historial de cero).
+        """
+        self.documento = documento
+        self.ruta_actual = ruta
+        self.pagina_actual = 0
+        self.historial.vaciar()
+        self.dibujar_todas_las_paginas()
+        self.actualizar_acciones_editar()
 
     def dibujar_todas_las_paginas(self):
         """Borra lo que hubiera dibujado y vuelve a crear una EtiquetaPDF por cada pagina."""
@@ -1191,6 +1337,10 @@ class EditorPDF(QMainWindow):
 
         self.barra_formato = barra
 
+        # Regla 6 del diseno: mientras esta edicion este abierta,
+        # Deshacer y Rehacer del documento quedan deshabilitados.
+        self.actualizar_acciones_editar()
+
     def _ajustar_altura_editor(self):
         """Hace crecer el editor hacia abajo conforme crece el texto.
 
@@ -1307,6 +1457,9 @@ class EditorPDF(QMainWindow):
             self.editor_texto_inline.deleteLater()
             self.editor_texto_inline = None
         self.parrafo_editando = None
+        # Ya no hay edicion en linea: vuelven a poder usarse Deshacer y
+        # Rehacer del documento (regla 6 del diseno).
+        self.actualizar_acciones_editar()
 
     def editar_imagen(self, pagina, imagen):
         """Muestra opciones para reemplazar o eliminar una imagen detectada."""
@@ -1518,6 +1671,8 @@ class EditorPDF(QMainWindow):
         self.documento = None
         self.ruta_actual = None
         self.pagina_actual = 0
+        # Cerrar el documento vacia el historial (regla 2 del diseno)
+        self.historial.vaciar()
         self.dibujar_todas_las_paginas()  # como documento es None, esto deja el panel vacio
 
         etiqueta_vacia = QLabel("Abre un PDF con el menu Archivo -> Abrir PDF")
@@ -1526,6 +1681,7 @@ class EditorPDF(QMainWindow):
 
         self.setWindowTitle("Mi Adobe PDF")
         self.actualizar_indicador_pagina()
+        self.actualizar_acciones_editar()
 
     def convertir_a_word(self):
         """Convierte el PDF actual (con los cambios que tengas hechos) a un archivo Word (.docx)."""

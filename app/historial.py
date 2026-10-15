@@ -147,12 +147,15 @@ class HistorialCambios:
         Se llama despues de cada `registrar`. Primero respeta el limite
         de pasos y despues el de bytes, siempre quitando de la base de
         la pila de Deshacer, que es donde estan las copias mas viejas
-        (Rehacer queda vacia al registrar).
+        (Rehacer queda vacia al registrar). El limite de bytes conserva
+        siempre la copia mas reciente, para que un documento que por si
+        solo pese mas que `limite_bytes` aun asi se pueda deshacer un
+        paso.
         """
         while len(self._pila_deshacer) > self._limite_pasos:
             self._pila_deshacer.pop(0)
         while (
-            self._pila_deshacer
+            len(self._pila_deshacer) > 1
             and self._tamano_total() > self._limite_bytes
         ):
             self._pila_deshacer.pop(0)
