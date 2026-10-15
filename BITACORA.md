@@ -908,6 +908,258 @@ conocidas.
 
 ---
 
+## Sesión 16 — 2026-10-14
+
+**Objetivo de la sesión:** Tarea 1 del plan `DISENO_DESHACER.md`:
+crear `app/historial.py` con la clase `HistorialCambios` (pilas de
+copias en memoria para Deshacer/Rehacer), sus pruebas sin Qt, y
+apuntar `AGENTS.md` al plan nuevo.
+
+**Actividades realizadas:**
+
+1. **`app/historial.py` (nuevo, 165 líneas):** clase
+   `HistorialCambios(limite_pasos=20, limite_bytes=300 * 1024 * 1024)`
+   con dos pilas de tuplas `(bytes, descripcion)`; `registrar` guarda
+   `documento.tobytes()`, vacía la pila de Rehacer (regla 1) y aplica
+   los límites descartando las copias más antiguas;
+   `descartar_ultimo` quita la última copia para operaciones que
+   fallan o se cancelan (regla 4); `deshacer`/`rehacer` devuelven un
+   `fitz.Document` nuevo abierto desde la copia y meten el estado
+   actual en la pila contraria con la misma descripción (`None` si no
+   hay nada); consultas `puede_deshacer`, `puede_rehacer`,
+   `descripcion_deshacer`, `descripcion_rehacer` y `vaciar`. Sin Qt,
+   solo `import fitz`.
+2. **`tests/test_historial.py` (nuevo, 195 líneas):** las 6 pruebas
+   que pide el diseño, con helpers `_documento_texto` y
+   `_agregar_linea` (PDFs en memoria, sin QApplication): registrar 3
+   cambios y deshacer 3 veces regresa al original; un cambio nuevo
+   vacía el Rehacer; con `limite_pasos=2` al registrar 3 solo se
+   pueden deshacer 2; con `limite_bytes` pequeño se descartan las
+   copias antiguas; `descartar_ultimo` quita la copia del cambio
+   cancelado; descripciones correctas en las dos pilas (y `vaciar`).
+3. **`AGENTS.md` (línea 15):** "Plan vigente" pasa de
+   `DISENO_EDITOR_TEXTO.md` a `DISENO_DESHACER.md`.
+4. **Verificación:** **pyright** → mismos 38 ruidos conocidos de
+   `app/main.py` (enums Qt, `Document`, `PDF_ENCRYPT_AES_256`,
+   `pixmap_limpio`), 0 errores en `app/historial.py` y en
+   `tests/test_historial.py` (sin `reportMissingImports`:
+   `extraPaths` de `pyrightconfig.json` alcanza para el import de
+   `historial`); **pytest** → 24/24 en verde (las 6 nuevas incluidas).
+
+**Resultado:** El corazón del Deshacer/Rehacer queda listo y probado
+sin ventanas: copias completas del documento en memoria con límites
+de 20 pasos / 300 MB, y la API completa que la Tarea 2 conectará al
+menú Editar de `main.py`.
+
+**Pendiente:**
+- Tarea 2 del plan: menú "Editar" en `EditorPDF` con Deshacer
+  (`QKeySequence.StandardKey.Undo`) y Rehacer
+  (`QKeySequence.StandardKey.Redo`), descripciones en el menú,
+  restaurar el documento y redibujar.
+
+---
+
+## Sesión 17 — 2026-10-14
+
+**Objetivo de la sesión:** Tarea 2 del plan `DISENO_DESHACER.md`
+(conectar `HistorialCambios` a `EditorPDF` con el menú Editar) más una
+corrección pedida por Diego en `app/historial.py`: el límite de bytes
+debe conservar siempre la copia más reciente, para que un PDF que por
+sí solo pese más que `limite_bytes` aún se pueda deshacer un paso.
+
+**Actividades realizadas:**
+
+1. **Corrección en `app/historial.py` (`_aplicar_limites`, líneas
+   144–162):** el ciclo del límite de bytes ahora exige
+   `len(self._pila_deshacer) > 1` antes de descartar, así que nunca se
+   elimina la última copia. Nueva prueba
+   `test_limite_de_bytes_conserva_la_copia_mas_reciente` en
+   `tests/test_historial.py` (líneas 144–164): con `limite_bytes=10`
+   (mucho menor que una sola copia) aun queda un deshacer posible.
+2. **`app/main.py`:**
+   - Imports: `QKeySequence` en QtGui (línea 41) y
+     `from historial import HistorialCambios` (línea 53).
+   - `__init__` (línea 321): `self.historial = HistorialCambios()`.
+   - `crear_menu_archivo` (línea 376) llama a `crear_menu_editar()`
+     entre los menús Archivo y Páginas.
+   - `crear_menu_editar` (línea 407): acciones "Deshacer" y "Rehacer"
+     con `QKeySequence.StandardKey.Undo` y `QKeySequence.StandardKey.Redo`,
+     arrancan deshabilitadas.
+   - `actualizar_acciones_editar` (línea 428): el texto lleva la
+     descripción ("Deshacer: Rotar página"); se deshabilitan sin nada
+     en el historial, con PDF protegido (`needs_pass`, regla 5) o con
+     edición en línea abierta (regla 6). Se llama también al abrir y
+     cerrar edición en línea (líneas 1342 y 1462).
+   - `registrar_cambio(descripcion)` (línea 466), `deshacer_cambio`
+     (línea 479), `rehacer_cambio` (línea 495) y
+     `_restaurar_documento` (línea 511): reemplaza `self.documento`,
+     conserva `pagina_actual` (ajustada), redibuja todo (los recuadros
+     de "Editar contenido" los redibuja `dibujar_todas_las_paginas`) y
+     muestra "Deshecho: …" / "Rehecho: …" en la barra de estado.
+   - `abrir_pdf` ahora llama a `cargar_documento(documento, ruta)`
+     (línea 633), que vacía el historial (regla 2); `cerrar_documento`
+     también lo vacía (líneas 1675 y 1684).
+3. **`tests/test_deshacer.py` (nuevo, 105 líneas, offscreen):** las 3
+   pruebas que pide el diseño: rotar con `registrar_cambio` y deshacer
+   → rotación 0, rehacer → rotación 90; abrir otro documento vacía el
+   historial y apaga las acciones; PDF con contraseña
+   (`fitz.PDF_ENCRYPT_AES_256`) deja las acciones deshabilitadas.
+4. **Verificación:** **pyright** → mismos 38 ruidos conocidos de
+   `app/main.py` + 1 del mismo tipo (`PDF_ENCRYPT_AES_256` no
+   "conocido" en `fitz`, ruido documentado en AGENTS.md) en
+   `test_deshacer.py:88`, 0 errores reales nuevos; **pytest** → 28/28
+   en verde (las 4 nuevas: 1 de historial + 3 de deshacer).
+
+**Resultado:** El Deshacer/Rehacer ya está conectado a la ventana: menú
+Editar entre Archivo y Páginas con Ctrl+Z / Ctrl+Y, descripción de lo
+que se deshace, deshabilitado con PDF protegido o edición en línea
+abierta, y el historial se vacía al abrir o cerrar un documento. La
+corrección del límite de bytes garantiza al menos un paso de deshacer
+aunque el PDF pese más que `limite_bytes`.
+
+**Pendiente:**
+- Tarea 3 del plan: llamar `registrar_cambio(...)` antes de cada
+  operación de la tabla "Qué cuenta como cambio" y
+  `historial.descartar_ultimo()` si algo falla o se cancela, con su
+  validación visual de Diego (4 cambios, deshacer 4, rehacer 2).
+
+---
+
+## Sesión 18 — 2026-10-15
+
+**Objetivo de la sesión:** Tarea 3 del plan `DISENO_DESHACER.md`
+(registrar cada operación que modifica el documento y descartar la
+copia si algo falla o se cancela), más la corrección pedida por Diego
+en la regla 5: detectar también los PDFs con solo contraseña de
+permisos, no solo `needs_pass`.
+
+**Actividades realizadas:**
+
+1. **Corrección de la regla 5 en `app/main.py`:**
+   - `__init__` (línea 324): `self.documento_protegido = False`.
+   - `cargar_documento` (línea 647):
+     `bool(documento.needs_pass or documento.metadata.get("encryption"))`,
+     que detecta tanto la contraseña de usuario como la de permisos
+     (guardada con `owner_pw` y `user_pw` vacío queda
+     `metadata["encryption"] = "Standard V5 R6 256-bit AES"`).
+   - `actualizar_acciones_editar` (línea 455), `deshacer_cambio`
+     (línea 485) y `rehacer_cambio` (línea 501) usan
+     `self.documento_protegido` en vez de `needs_pass`; al cerrar el
+     documento vuelve a `False` (línea 1753).
+   - Prueba nueva
+     `test_pdf_solo_con_contrasena_de_permisos_deshabilita_las_acciones`
+     en `tests/test_deshacer.py` (líneas 126–152).
+2. **Registro de cambios (Tarea 3) en `app/main.py`:**
+   - `al_seleccionar_rectangulo` (líneas 808–875): mapa de herramienta
+     a descripción ("Resaltar", "Subrayar", "Tachar", "Texto libre",
+     "Rectangulo", "Linea", "Circulo", "Firma") con
+     `registrar_cambio` antes de aplicar; `descartar_ultimo` si el
+     usuario cancela el diálogo de texto libre, si falta la firma o si
+     la operación lanza excepción (regla 4). "Editar contenido" no
+     registra aquí: su cambio cuenta al aceptar.
+   - `aceptar_edicion_texto` (líneas 1464–1489): registra "Editar
+     texto" antes de tocar el PDF y descarta si no cabe o si falla.
+   - `editar_forma` (líneas 1244 y 1279): "Cambiar color de forma".
+   - `editar_imagen` (líneas 1553 y 1587): "Reemplazar imagen" /
+     "Eliminar imagen" después de elegir y confirmar, con descarte en
+     excepción; `colocar_imagen_en_punto` no registra (completa el
+     mismo cambio).
+   - Páginas: `rotar_pagina` (1622), `eliminar_pagina` (1640, después
+     de confirmar), `insertar_pagina_blanco` (1648) y
+     `reordenar_paginas` (1667, con descarte si `select` falla).
+3. **Pruebas nuevas en `tests/test_deshacer.py` (ahora 259 líneas):**
+   ayuda `_documento_de`/`_pagina_de`/`_texto_de_pagina` (líneas
+   33–47) y 5 pruebas: resaltar y deshacer quita la anotación (155),
+   eliminar página y deshacer la regresa con `monkeypatch` de
+   `QMessageBox.question` (173), aceptar edición en línea y deshacer
+   regresa "uno dos tres" (191), cancelar el diálogo de texto libre no
+   deja copia (231), y la de contraseña de permisos (126).
+4. **Verificación:** **pyright** → 40 errores, todos ruido conocido
+   (38 de `app/main.py` + 2 de `PDF_ENCRYPT_AES_256` en
+   `test_deshacer.py:110` y `:141`, tipo documentado en AGENTS.md),
+   0 errores reales nuevos; **pytest** → 33/33 en verde (5 nuevas).
+
+**Resultado:** Todas las operaciones de la tabla "Qué cuenta como
+cambio" registran su copia antes de modificar el PDF y la descartan si
+fallan o se cancelan, así que Deshacer/Rehacer refleja solo cambios
+reales. La regla 5 ahora también protege a los PDFs con contraseña de
+permisos que se abren sin pedirla.
+
+**Pendiente:**
+- Validación visual de Diego (Tarea 3): hacer 4 cambios distintos
+  (resaltar, texto libre, rotar página, editar texto en línea),
+  deshacer los 4 con Ctrl+Z revisando que cada uno regresa, rehacer 2
+  con Ctrl+Y y confirmar que el menú Editar muestra la descripción
+  correcta; probar también cancelar el diálogo de texto libre y
+  verificar que el menú Editar no queda con nada para deshacer.
+- Tarea 4 del plan: documentación (README, ROADMAP, marcar el diseño
+  como completado).
+
+---
+
+## Sesión 19 — 2026-10-15
+
+**Objetivo de la sesión:** Tarea 4 del plan `DISENO_DESHACER.md`
+(documentación: README, ROADMAP y marcar el diseño como completado), más
+la corrección pedida por Diego: si una operación falla *después* de haber
+modificado el PDF, descartar la copia deja el documento a medias y sin
+forma de deshacer; hay que revertir el cambio registrado.
+
+**Actividades realizadas:**
+
+1. **Corrección en `app/main.py`:**
+   - Nuevo método `_revertir_cambio_fallido` (líneas 532–549): usa
+     `self.historial.deshacer(self.documento)` para restaurar el estado
+     anterior, lo carga con `_restaurar_documento` y luego vacía la pila
+     de Rehacer con `vaciar_rehacer()` (ese "cambio" nunca existió),
+     actualizando las acciones del menú Editar.
+   - `aceptar_edicion_texto`: el `except` de después de
+     `add_redact_annot`/`apply_redactions`/`insertar_texto_con_formato`
+     (líneas 1507–1514) ahora llama a `_revertir_cambio_fallido()` en
+     vez de `descartar_ultimo()`. Los casos de cancelación (diálogo
+     cancelado, texto no cabe, líneas 1466 y 1486) siguen usando
+     `descartar_ultimo()`.
+   - `al_seleccionar_rectangulo`: el `except` general (líneas 890–896)
+     también usa `_revertir_cambio_fallido()` (solo si se registró un
+     cambio). Los casos de cancelación (texto libre cancelado, falta la
+     firma, líneas 866 y 873) siguen usando `descartar_ultimo()`.
+2. **`app/historial.py`:** nuevo método `vaciar_rehacer` (líneas
+   140–147) que borra solo la pila de Rehacer, dejando la de Deshacer.
+3. **`tests/test_historial.py`:** nueva prueba
+   `test_vaciar_rehacer_borra_solo_el_rehacer` (líneas 190–212).
+4. **`tests/test_deshacer.py`:** nueva prueba
+   `test_fallo_al_escribir_texto_revuelve_el_documento` (líneas
+   263–310): simula un fallo de `insertar_texto_con_formato` con
+   `monkeypatch` y verifica que el párrafo original "uno dos tres"
+   sigue en el documento y que no queda nada ni para deshacer ni para
+   rehacer. El import `import main as modulo_main` se agregó para poder
+   parchear la función.
+5. **Tarea 4 — documentación:**
+   - `README.md`: casilla nueva del checklist ("Deshacer y Rehacer",
+     línea 20), mención en "Estado actual" (líneas 30–42) y subsección
+     "↩️ Limitaciones conocidas del Deshacer/Rehacer" (líneas 44–49):
+     20 pasos / 300 MB y deshabilitado en PDFs con contraseña.
+   - `ROADMAP.md` Fase 8: ítem completado del Deshacer/Rehacer (líneas
+     68–70).
+   - `DISENO_DESHACER.md`: bloque de estado COMPLETADO arriba (líneas
+     3–7), regla 4 actualizada con el comportamiento de revertir (líneas
+     34–40) y encabezados de Tarea 1 a Tarea 4 marcados con ✅.
+6. **Verificación:** **pyright** → 40 errores, todos ruido conocido (38
+   de `app/main.py` + 2 de `PDF_ENCRYPT_AES_256` en `test_deshacer.py`),
+   0 errores reales nuevos; **pytest** → 35/35 en verde (2 nuevas).
+
+**Resultado:** Cuando una operación falla después de tocar el PDF, el
+documento se revierte al estado anterior y el cambio fallido no queda ni
+en Deshacer ni en Rehacer. La documentación del plan (README, ROADMAP
+Fase 8 y el diseño) refleja la función terminada y sus limitaciones.
+
+**Pendiente:**
+- Validación visual de Diego: probar el fallo real (por ejemplo, un PDF
+  raro donde falle la edición de texto) y confirmar que el documento
+  regresa solo; y revisar la documentación actualizada.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

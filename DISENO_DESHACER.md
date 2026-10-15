@@ -1,5 +1,11 @@
 # ↩️ Diseño — Deshacer y Rehacer
 
+> **✅ COMPLETADO (Tareas 1–4, 2026-10-15).** Menú Editar con Ctrl+Z / Ctrl+Y,
+> historial de copias en memoria, registro de cada cambio y documentación.
+> Última corrección: si un cambio falla *después* de modificar el PDF, el
+> documento se revierte (`_revertir_cambio_fallido`), no solo se descarta la
+> copia.
+
 > Documento de diseño de la función Deshacer/Rehacer de Mi-Adobe-PDF.
 > Mismo método que `DISENO_EDITOR_TEXTO.md`: diseño primero, tareas
 > pequeñas con pruebas, validación visual de Diego al final.
@@ -31,8 +37,13 @@ anterior con `fitz.open("pdf", copia)`.
 1. Hacer un cambio nuevo **borra** la pila de Rehacer (igual que en Word).
 2. Abrir otro documento o cerrar el documento **vacía** el historial.
 3. Guardar **no** vacía el historial: se puede deshacer después de guardar.
-4. Si una operación falla después de registrar la copia, esa copia se
-   descarta, para que Deshacer no "deshaga" algo que nunca pasó.
+4. Si una operación falla o el usuario la cancela **antes** de tocar el
+   PDF, la copia se descarta (`descartar_ultimo`), para que Deshacer no
+   "deshaga" algo que nunca pasó. Si falla **después** de haber
+   modificado el documento (por ejemplo, al escribir el texto de la
+   edición en línea), la copia se usa para **revertir** el cambio
+   (`_revertir_cambio_fallido`: deshacer + restaurar + vaciar rehacer),
+   porque descartar sola la copia dejaría el documento a medias.
 5. **Documentos con contraseña:** Deshacer y Rehacer quedan **deshabilitados**.
    Motivo: las copias en memoria se guardan sin cifrar, y al guardar se
    perdería la contraseña del archivo. Se informa en la barra de estado.
@@ -66,7 +77,7 @@ convertir a Word, OCR, guardar como.
 
 ## 📋 Tareas (en orden, una por sesión de OpenCode)
 
-### Tarea 1 — `app/historial.py`
+### Tarea 1 ✅ — `app/historial.py`
 
 - Clase `HistorialCambios(limite_pasos=20, limite_bytes=300 * 1024 * 1024)`.
 - `registrar(documento, descripcion)`: guarda `documento.tobytes()` con su
@@ -86,7 +97,7 @@ convertir a Word, OCR, guardar como.
   `descartar_ultimo` funciona; las descripciones son correctas.
 - Actualizar en `AGENTS.md` la línea "Plan vigente" a `DISENO_DESHACER.md`.
 
-### Tarea 2 — Menú Editar y restaurar el documento
+### Tarea 2 ✅ — Menú Editar y restaurar el documento
 
 - En `EditorPDF`: un `HistorialCambios`, un menú **"Editar"** (entre
   Archivo y Páginas) con **Deshacer** (`QKeySequence.StandardKey.Undo`) y
@@ -104,7 +115,7 @@ convertir a Word, OCR, guardar como.
   deshacer → rotación 0; rehacer → rotación 90; abrir otro documento vacía
   el historial; con un PDF con contraseña las acciones están deshabilitadas.
 
-### Tarea 3 — Registrar cada operación (👁️ validación visual)
+### Tarea 3 ✅ — Registrar cada operación (👁️ validación visual)
 
 - Llamar `registrar_cambio(...)` **antes** de cada operación de la tabla
   "Qué cuenta como cambio", y `historial.descartar_ultimo()` si la
@@ -117,7 +128,7 @@ convertir a Word, OCR, guardar como.
   con `Ctrl+Z` revisando que cada uno regresa, rehacer 2 con `Ctrl+Y`, y
   confirmar que el menú Editar muestra la descripción correcta.
 
-### Tarea 4 — Documentación
+### Tarea 4 ✅ — Documentación
 
 - `README.md` (checklist y estado), `ROADMAP.md` (Fase 8 u otra que
   corresponda), `BITACORA.md`, y marcar este diseño como completado.
