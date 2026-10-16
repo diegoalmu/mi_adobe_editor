@@ -1,5 +1,12 @@
 # 📝 Diseño — Llenar formularios PDF (Fase 5, parte 1)
 
+> **✅ COMPLETADO (Tareas 1–5, 2026-10-16).** Panel lateral "Campos del
+> formulario" con un control por tipo, escritura en el PDF con Deshacer y
+> Rehacer, selección al hacer clic sobre el campo en la página y
+> documentación en `README.md` y `ROADMAP.md`.
+> Corrección final: los campos de texto no emiten cambios vacíos al perder
+> el foco, y un valor igual al del documento no se registra ni se escribe.
+
 > Documento de diseño para llenar los campos de formularios que YA existen
 > en un PDF. Mismo método que `DISENO_EDITOR_TEXTO.md` y `DISENO_DESHACER.md`:
 > diseño primero, tareas pequeñas con pruebas, validación visual de Diego
@@ -114,7 +121,7 @@ Igual que en los diseños anteriores:
 
 ## 📋 Tareas (en orden, una por sesión de OpenCode)
 
-### Tarea 1 — `app/formularios.py`: leer campos
+### Tarea 1 ✅ — `app/formularios.py`: leer campos
 
 - `listar_campos(documento)` → lista de diccionarios, uno por campo (los
   botones de opción del mismo nombre se agrupan en uno solo):
@@ -137,7 +144,7 @@ Igual que en los diseños anteriores:
   el de solo lectura venga marcado. Un PDF sin campos → `tiene_formulario`
   es `False`.
 
-### Tarea 2 — `app/formularios.py`: escribir valores
+### Tarea 2 ✅ — `app/formularios.py`: escribir valores
 
 - `escribir_valor(documento, campo, valor)`:
   - texto → string; casilla → `True`/`False`; opción y lista → una de las
@@ -150,7 +157,7 @@ Igual que en los diseños anteriores:
   escribir en un campo de solo lectura lanzan `ValueError` sin modificar el
   documento.
 
-### Tarea 3 — `app/panel_formularios.py`: el panel
+### Tarea 3 ✅ — `app/panel_formularios.py`: el panel
 
 - `PanelFormularios(QDockWidget)` con título "Campos del formulario" y una
   lista con desplazamiento: una fila por campo (nombre + control según el
@@ -164,7 +171,7 @@ Igual que en los diseños anteriores:
   control correcto por tipo y el de solo lectura deshabilitado; marcar una
   casilla emite `valor_cambiado` una sola vez; `cargar()` no emite señales.
 
-### Tarea 4 — Conectar en `app/main.py` (👁️ validación visual)
+### Tarea 4 ✅ — Conectar en `app/main.py` (👁️ validación visual)
 
 - Menú **"Formularios"** con la acción **"Mostrar campos"** (activable).
 - Al abrir un PDF con campos, el panel se muestra solo, a la derecha; sin
@@ -182,7 +189,7 @@ Igual que en los diseños anteriores:
   un formato de gobierno descargado), llenar texto, casillas y listas,
   guardar con "Guardar como" y abrir el resultado en Edge o Chrome.
 
-### Tarea 5 — Documentación
+### Tarea 5 ✅ — Documentación
 
 - `README.md` (checklist "Rellenar formularios PDF"), `ROADMAP.md` (Fase 5,
   parte 1 completada), `BITACORA.md`, y marcar este diseño como completado.

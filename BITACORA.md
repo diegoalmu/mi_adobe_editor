@@ -1497,6 +1497,60 @@ ensucian el historial de Deshacer.
 
 ---
 
+## Sesión 25 — 2026-10-16
+
+**Objetivo de la sesión:** Terminar la Fase 5, parte 1, con la Tarea 5
+del diseño `DISENO_FORMULARIOS.md`: documentación (README, ROADMAP,
+BITACORA) y marcar el diseño como completado. Solo documentación, sin
+cambios de código.
+
+**Actividades realizadas:**
+
+1. **`DISENO_FORMULARIOS.md`:**
+   - Bloque de "✅ COMPLETADO (Tareas 1–5, 2026-10-16)" al inicio del
+     documento (líneas 3–8), al estilo de `DISENO_DESHACER.md`.
+   - Las cinco tareas quedan marcadas con ✅ en sus títulos (líneas
+     124, 147, 160, 174 y 192).
+2. **`README.md`:**
+   - Checklist del objetivo (líneas 22–24): el punto "Rellenar y crear
+     formularios PDF" se divide en "Rellenar los campos que ya trae el
+     PDF" (hecho, con enlace al diseño) y "Crear campos de formulario
+     nuevos" (pendiente).
+   - "Estado actual" (líneas 35–42): se menciona la parte 1 de la Fase 5
+     (panel lateral, control por tipo, Deshacer/Rehacer y selección con
+     clic en la página).
+   - Nueva sección **"📝 Limitaciones conocidas de los formularios"**
+     (líneas 70–81): sin crear campos nuevos, sin XFA, sin JavaScript
+     del formulario, sin firmas digitales (solo "Firma (no editable
+     aquí)") y sin aplanar el formulario.
+   - Párrafo de pendientes (líneas 83–85): ya no dice "formularios
+     (Fase 5)" a secas, sino "crear campos de formulario nuevos (Fase
+     5, parte 2)".
+3. **`ROADMAP.md`:**
+   - Fase 5 (líneas 45–66): de "sin empezar" a "parte 1 completada",
+     con el punto hecho de rellenar campos existentes (Tareas 1–5 del
+     diseño), el pendiente de la parte 2 (crear campos) y cinco
+     limitaciones conocidas al estilo de la Fase 4.
+4. **`BITACORA.md`:** esta entrada (Sesión 25).
+5. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt, `Document` vs `Iterable`,
+   `PDF_ENCRYPT_AES_256`, `pixmap_limpio`), 0 errores nuevos;
+   **pytest** → 63/63 en verde (sin cambios de código, todo sigue en
+   verde).
+
+**Resultado:** La Fase 5, parte 1 (llenar formularios PDF) queda
+documentada y marcada como completada: el README explica la función y
+sus límites, el ROADMAP marca la parte 1 hecha y deja la parte 2
+(crear campos) como pendiente, y el diseño `DISENO_FORMULARIOS.md`
+cierra con sus cinco tareas completadas. Diego ya hizo la validación
+visual con un formulario PDF real (Tarea 4) y todo funcionó bien.
+
+**Pendiente:**
+- Fase 5, parte 2: crear campos de formulario nuevos (con su propio
+  diseño).
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

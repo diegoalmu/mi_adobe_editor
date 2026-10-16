@@ -19,7 +19,9 @@ un programa de escritorio (Windows y Linux) capaz de:
 - [x] Deshacer y Rehacer (Ctrl+Z / Ctrl+Y, menú Editar, hasta 20 pasos)
 - [ ] Comentar (notas tipo "sticky note")
 - [x] Unir, dividir, reordenar (arrastrar o botones), rotar y eliminar páginas
-- [ ] Rellenar y crear formularios PDF
+- [x] Rellenar los campos de formulario que ya trae el PDF (ver
+  [DISENO_FORMULARIOS.md](DISENO_FORMULARIOS.md))
+- [ ] Crear campos de formulario nuevos (texto, casilla, firma)
 - [x] Exportar PDF a imágenes
 - [x] Convertir PDF → Word (.docx)
 - [x] OCR (convertir PDFs escaneados en texto editable/buscable)
@@ -31,7 +33,13 @@ un programa de escritorio (Windows y Linux) capaz de:
 ### 📍 Estado actual (octubre 2026)
 
 Fases 1 a 4 del [ROADMAP](ROADMAP.md) completadas y funcionando (visor, anotaciones,
-gestión de páginas y edición de contenido real). La **edición de texto tipo Word**
+gestión de páginas y edición de contenido real), más la **parte 1 de la Fase 5:
+llenar los campos de formulario que ya trae el PDF** (plan
+[DISENO_FORMULARIOS.md](DISENO_FORMULARIOS.md), Tareas 1–5): al abrir un PDF con
+campos se muestra el panel lateral **"Campos del formulario"** con un control por
+tipo de campo (cuadro de texto, casilla, botones de opción y lista desplegable),
+cada cambio se escribe en el PDF con su paso de Deshacer/Rehacer y un clic sobre
+un campo de la página lo identifica en el panel. La **edición de texto tipo Word**
 está terminada y validada (plan [DISENO_EDITOR_TEXTO.md](DISENO_EDITOR_TEXTO.md),
 Tareas 0–6): clic sobre un párrafo → cuadro editable en línea con barra de formato
 (tipografía, tamaño, negrita/cursiva/subrayado, color), sin abrir ventanas. También
@@ -59,9 +67,22 @@ y probado como aplicación de escritorio en Linux** (ver [EMPAQUETADO.md](EMPAQU
 4. La fuente original del PDF no se conserva; se usa una de las 5 tipografías de la
    lista (Arial, Times New Roman, Calibri, Verdana, Courier New).
 
-Pendientes: formularios (Fase 5), notas "sticky note", redacción permanente,
-firma con certificado, exportar a Excel, generar el `.exe` de Windows, ícono
-propio y la documentación final de portafolio (Fase 9).
+#### 📝 Limitaciones conocidas de los formularios
+
+1. **No se pueden crear campos nuevos** todavía (Fase 5, parte 2): solo se llenan
+   los campos que el PDF ya trae.
+2. **Formularios XFA** (formato viejo de Adobe LiveCycle): si el PDF solo tiene
+   campos XFA, el programa avisa que no se puede llenar con él.
+3. **No se ejecuta el JavaScript** del formulario: si en Acrobat un campo calcula
+   un total automáticamente, aquí no se calcula.
+4. **Firmas digitales**: los campos de firma se listan como "Firma (no editable
+   aquí)"; por ahora la única firma del programa es la de imagen.
+5. **No se aplana el formulario**: al guardar, los campos siguen siendo campos y
+   se pueden seguir llenando en otro visor (Edge, Chrome, Acrobat).
+
+Pendientes: crear campos de formulario nuevos (Fase 5, parte 2), notas "sticky
+note", redacción permanente, firma con certificado, exportar a Excel, generar el
+`.exe` de Windows, ícono propio y la documentación final de portafolio (Fase 9).
 
 ## 🛠️ Tecnología usada
 
