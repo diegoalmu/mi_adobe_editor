@@ -1272,6 +1272,69 @@ las tareas 2 a 4.
 
 ---
 
+## Sesión 22 — 2026-10-15
+
+**Objetivo de la sesión:** Continuar la Fase 5 con la Tarea 2 del diseño
+`DISENO_FORMULARIOS.md`: escribir valores en los campos, más la corrección
+de `listar_campos` para agrupar por `field_name` todos los tipos (no solo
+los botones de opción).
+
+**Actividades realizadas:**
+
+1. **`app/formularios.py`:**
+   - `listar_campos` (líneas 44–86): ahora agrupa por `field_name` TODOS
+     los tipos con un diccionario (`indices_por_nombre`, línea 68): un
+     campo de texto, casilla o lista que aparece en varias páginas (por
+     ejemplo el nombre en el encabezado de cada hoja) sale una sola vez,
+     con todas sus `paginas`, `rects` y `xrefs`. Se reemplazaron
+     `_campo_de_grupo` y `_agregar_boton_al_grupo` por
+     `_agregar_aparicion` (líneas 188–212), que además de las opciones
+     del grupo mantiene el solo-lectura como AND de todas las
+     apariciones.
+   - `escribir_valor(documento, campo, valor)` (líneas 104–138): escribe
+     el valor en TODOS los widgets del campo y llama `widget.update()`
+     en cada uno. Lanza `ValueError` con mensaje en español (sin tocar
+     el documento) si el campo es de firma, de solo lectura, no existe
+     en el documento, o si el valor no es válido para su tipo.
+   - Internos nuevos: `_validar_valor` (líneas 264–287; texto → string,
+     casilla → bool, opción/lista → una de las opciones),
+     `_escribir_en_widgets` (líneas 290–308; busca cada widget por su
+     `xref` y lo escribe mientras su página viva en memoria: PyMuPDF
+     solo permite `update()` con la página viva) y `_asignar_valor`
+     (líneas 311–327; en grupos de opción solo enciende el botón cuyo
+     `on_state()` coincide y apaga los demás, porque PyMuPDF no los
+     apaga solo).
+2. **`tests/test_formularios.py`:** 6 pruebas nuevas (13 en total):
+   - `test_campo_repetido_en_dos_paginas_sale_una_sola_vez` (línea 336)
+     y `test_escribir_valor_actualiza_todos_los_widgets_del_campo`
+     (línea 392): un texto con el mismo nombre en dos páginas sale una
+     sola vez en `listar_campos` y, al escribirlo, ambos widgets quedan
+     con el valor nuevo después de `tobytes()` y reabrir.
+   - `test_escribir_valor_llena_los_tipos_y_persisten_al_guardar`
+     (línea 354): texto, multilínea, casilla, opción y lista persisten
+     al guardar y reabrir.
+   - `test_escribir_valor_invalido_en_lista_lanza_error` (línea 420),
+     `test_escribir_valor_en_solo_lectura_lanza_error` (línea 437) y
+     `test_escribir_valor_en_firma_lanza_error` (línea 454): lanzan
+     `ValueError` sin modificar el documento.
+   - Ayudante `_pdf_texto_en_dos_paginas` (línea 182): crea dos páginas
+     y recarga cada una con `documento[n]` (al crear la segunda página,
+     PyMuPDF invalida el enlace de la primera).
+3. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt y `PDF_ENCRYPT_AES_256`), 0 errores
+   nuevos; **pytest** → 49/49 en verde (6 nuevas).
+
+**Resultado:** `app/formularios.py` ya lee y escribe los campos de un
+formulario PDF: texto (incluidos repetidos en varias páginas),
+casillas, grupos de opción, listas y firmas, con validación de valores
+y regeneración de apariencia; esto completa la base para el panel de
+las tareas 3 y 4.
+
+**Pendiente:**
+- Tarea 3: `app/panel_formularios.py` (`PanelFormularios(QDockWidget)`).
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

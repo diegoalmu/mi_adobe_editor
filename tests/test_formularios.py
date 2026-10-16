@@ -1,4 +1,4 @@
-"""Pruebas de app/formularios.py (Tarea 1 del diseno de Formularios).
+"""Pruebas de app/formularios.py (Tareas 1 y 2 del diseno de Formularios).
 
 Este modulo solo usa PyMuPDF (sin Qt), asi que las pruebas corren sin
 QApplication. Cada prueba crea su propio PDF en memoria con campos,
@@ -9,8 +9,14 @@ asi corre el programa.
 """
 
 import fitz
+import pytest
 
-from formularios import es_solo_xfa, listar_campos, tiene_formulario
+from formularios import (
+    es_solo_xfa,
+    escribir_valor,
+    listar_campos,
+    tiene_formulario,
+)
 
 # Se importan del mismo sitio que formularios.py (el modulo "mupdf" de
 # PyMuPDF), porque el paquete principal las re-exporta de forma dinamica
@@ -173,6 +179,24 @@ def _pdf_xfa():
     return documento
 
 
+def _pdf_texto_en_dos_paginas():
+    """PDF en memoria con un campo de texto repetido en dos paginas.
+
+    Simula el encabezado de un formato de varias hojas: el mismo campo
+    (mismo `field_name`) aparece una vez por pagina.
+    """
+    documento = fitz.open()
+    documento.new_page(width=595, height=842)
+    documento.new_page(width=595, height=842)
+    # Se recarga cada pagina con `documento[n]`: al crear la segunda,
+    # PyMuPDF invalida el enlace de la primera.
+    for num_pagina in (0, 1):
+        _agregar_texto(
+            documento[num_pagina], "nombre_cliente", (72, 72, 250, 92)
+        )
+    return documento
+
+
 def _campo_de(nombre, campos):
     """Regresa el unico campo con ese nombre (falla si hay 0 o mas)."""
     encontrados = [campo for campo in campos if campo["nombre"] == nombre]
@@ -307,3 +331,135 @@ def test_pdf_solo_xfa_se_detecta_y_el_normal_no():
         documento_xfa.close()
         documento_formulario.close()
         documento_normal.close()
+
+
+def test_campo_repetido_en_dos_paginas_sale_una_sola_vez():
+    """Un texto con el mismo nombre en dos paginas es un solo campo."""
+    documento = _pdf_texto_en_dos_paginas()
+    try:
+        campos = listar_campos(documento)
+
+        assert len(campos) == 1
+        campo = campos[0]
+        assert campo["nombre"] == "nombre_cliente"
+        assert campo["tipo"] == "texto"
+        # Cada aparicion aporta su pagina, rect y xref.
+        assert campo["paginas"] == [0, 1]
+        assert len(campo["rects"]) == 2
+        assert len(campo["xrefs"]) == 2
+    finally:
+        documento.close()
+
+
+def test_escribir_valor_llena_los_tipos_y_persisten_al_guardar():
+    """Se llenan los tipos, se guarda con tobytes() y al reabrir
+    quedan los valores."""
+    documento = _pdf_de_formulario()
+    try:
+        campos = listar_campos(documento)
+        escribir_valor(
+            documento, _campo_de("nombre_cliente", campos), "Ana Lopez"
+        )
+        escribir_valor(
+            documento,
+            _campo_de("observaciones", campos),
+            "Una linea\nOtra linea",
+        )
+        escribir_valor(
+            documento, _campo_de("acepta_terminos", campos), True
+        )
+        escribir_valor(documento, _campo_de("genero", campos), "Si")
+        escribir_valor(documento, _campo_de("estado", campos), "Jalisco")
+        datos = documento.tobytes()
+    finally:
+        documento.close()
+
+    reabierto = fitz.open(stream=datos, filetype="pdf")
+    try:
+        campos = listar_campos(reabierto)
+        assert _campo_de("nombre_cliente", campos)["valor"] == "Ana Lopez"
+        assert (
+            _campo_de("observaciones", campos)["valor"]
+            == "Una linea\nOtra linea"
+        )
+        assert _campo_de("acepta_terminos", campos)["valor"] is True
+        assert _campo_de("genero", campos)["valor"] == "Si"
+        assert _campo_de("estado", campos)["valor"] == "Jalisco"
+    finally:
+        reabierto.close()
+
+
+def test_escribir_valor_actualiza_todos_los_widgets_del_campo():
+    """Un texto repetido en dos paginas: los dos widgets quedan con el
+    valor nuevo al guardar con tobytes() y reabrir."""
+    documento = _pdf_texto_en_dos_paginas()
+    try:
+        campos = listar_campos(documento)
+        escribir_valor(
+            documento,
+            _campo_de("nombre_cliente", campos),
+            "Ana Lopez",
+        )
+        datos = documento.tobytes()
+    finally:
+        documento.close()
+
+    reabierto = fitz.open(stream=datos, filetype="pdf")
+    try:
+        valores = []
+        for num_pagina in (0, 1):
+            for widget in reabierto[num_pagina].widgets():
+                # Con getattr porque PyMuPDF no anota el tipo de
+                # "field_value" y pyright lo ve como Annot.
+                valores.append(getattr(widget, "field_value"))
+        assert valores == ["Ana Lopez", "Ana Lopez"]
+    finally:
+        reabierto.close()
+
+
+def test_escribir_valor_invalido_en_lista_lanza_error():
+    """Un valor que no es de la lista lanza ValueError sin tocar el
+    documento."""
+    documento = _pdf_de_formulario()
+    try:
+        campos = listar_campos(documento)
+        lista = _campo_de("estado", campos)
+
+        with pytest.raises(ValueError):
+            escribir_valor(documento, lista, "Oaxaca")
+
+        # El documento no se modifica: el campo sigue vacio.
+        assert _campo_de("estado", listar_campos(documento))["valor"] == ""
+    finally:
+        documento.close()
+
+
+def test_escribir_valor_en_solo_lectura_lanza_error():
+    """Escribir en un campo de solo lectura lanza ValueError sin tocar
+    el documento."""
+    documento = _pdf_de_formulario()
+    try:
+        campos = listar_campos(documento)
+        solo_lectura = _campo_de("folio", campos)
+
+        with pytest.raises(ValueError):
+            escribir_valor(documento, solo_lectura, "FOLIO-1")
+
+        # El documento no se modifica: el campo sigue vacio.
+        assert _campo_de("folio", listar_campos(documento))["valor"] == ""
+    finally:
+        documento.close()
+
+
+def test_escribir_valor_en_firma_lanza_error():
+    """Escribir en un campo de firma lanza ValueError (aqui no se
+    puede firmar)."""
+    documento = _pdf_de_formulario()
+    try:
+        campos = listar_campos(documento)
+        firma = _campo_de("firma_solicitante", campos)
+
+        with pytest.raises(ValueError):
+            escribir_valor(documento, firma, "cualquier cosa")
+    finally:
+        documento.close()

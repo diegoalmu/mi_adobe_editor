@@ -1,23 +1,28 @@
 """
-formularios.py - Lectura de campos de formulario PDF
-=====================================================
+formularios.py - Lectura y escritura de campos de formulario PDF
+================================================================
 
-Funciones para leer los campos que YA trae un PDF (formato AcroForm),
-segun el diseno `DISENO_FORMULARIOS.md` (Tarea 1):
+Funciones para leer y escribir los campos que YA trae un PDF (formato
+AcroForm), segun el diseno `DISENO_FORMULARIOS.md` (Tareas 1 y 2):
 
-- `listar_campos(documento)`: lista de diccionarios, uno por campo. Los
-  botones de opcion que comparten nombre se agrupan en un solo campo.
+- `listar_campos(documento)`: lista de diccionarios, uno por nombre de
+  campo. Todas las apariciones de un mismo nombre (varios botones de
+  opcion de un grupo, o un campo repetido en el encabezado de cada
+  pagina) comparten un solo diccionario.
 - `tiene_formulario(documento)`: `True` si hay al menos un campo listable.
 - `es_solo_xfa(documento)`: `True` si el PDF usa XFA (formato viejo de
   Adobe LiveCycle) y no tiene campos normales: ese formulario no se
   puede llenar con este programa.
+- `escribir_valor(documento, campo, valor)`: escribe el valor en todos
+  los widgets del campo y regenera su apariencia, para que el texto se
+  vea en cualquier visor.
 
 Tipos posibles de campo (los del diseno): `"texto"`, `"casilla"`,
 `"opcion"`, `"lista"` y `"firma"`. Los botones de accion (pushbotones)
 no se listan, porque no se pueden llenar.
 
-Este modulo no escribe en el PDF (eso viene en la Tarea 2) ni crea
-ventanas: se prueba con `tests/test_formularios.py` sin Qt.
+Este modulo no crea ventanas: se prueba con `tests/test_formularios.py`
+sin Qt.
 """
 
 # Las constantes de los tipos de campo y de las banderas del PDF viven
@@ -39,37 +44,42 @@ from pymupdf.mupdf import (
 def listar_campos(documento):
     """Devuelve los campos del formulario en una lista de diccionarios.
 
-    Un diccionario por campo, con esta forma (del diseno):
+    Un diccionario por nombre de campo, con esta forma (del diseno):
 
         {"nombre": "nombre_cliente", "tipo": "texto", "valor": "",
          "opciones": [], "solo_lectura": False, "multilinea": False,
          "paginas": [0], "rects": [fitz.Rect(...)], "xrefs": [123]}
 
+    - Todos los widgets que comparten `field_name` forman UN solo
+      diccionario: los botones de opcion de un grupo, y tambien un campo
+      de texto, casilla o lista que se repite en varias paginas (por
+      ejemplo el nombre en el encabezado de cada hoja).
     - `paginas`, `rects` y `xrefs` tienen una entrada por cada aparicion
-      del campo en el PDF; para un grupo de botones de opcion hay una
-      entrada por cada boton del grupo.
+      del campo en el PDF.
     - `opciones` solo se usa en `"lista"` (las opciones del PDF) y en
       `"opcion"` (el estado encendido de cada boton del grupo).
     - El orden es el del documento: pagina por pagina, y en cada pagina
       el orden en que PyMuPDF encuentra los campos.
     """
     campos = []
-    # Nombre del campo de opciones -> posicion en la lista `campos`.
-    # Solo se usa para agrupar los botones de opcion del mismo grupo.
-    indices_grupos = {}
+    # Nombre del campo -> posicion en la lista `campos`. Se usa para
+    # agrupar en un solo diccionario todas las apariciones de un nombre
+    # (grupos de opcion y campos repetidos en varias paginas).
+    indices_por_nombre = {}
     for num_pagina in range(documento.page_count):
         pagina = documento[num_pagina]
         for widget in pagina.widgets():
             tipo = _tipo_de_widget(widget)
             if tipo is None:
                 continue  # botones de accion y tipos desconocidos
-            if tipo == "opcion":
-                campo = _campo_de_grupo(
-                    campos, indices_grupos, widget
-                )
+            nombre = widget.field_name
+            if nombre in indices_por_nombre:
+                campo = campos[indices_por_nombre[nombre]]
+                _agregar_aparicion(campo, widget, tipo)
             else:
                 campo = _nuevo_campo(widget, tipo)
                 campos.append(campo)
+                indices_por_nombre[nombre] = len(campos) - 1
             campo["paginas"].append(num_pagina)
             campo["rects"].append(widget.rect)
             campo["xrefs"].append(widget.xref)
@@ -89,6 +99,43 @@ def es_solo_xfa(documento):
     ninguno.
     """
     return _hay_xfa(documento) and not tiene_formulario(documento)
+
+
+def escribir_valor(documento, campo, valor):
+    """Escribe `valor` en el campo y regenera su apariencia en el PDF.
+
+    - `"texto"`: `valor` debe ser un string (con `"\\n"` si es
+      multiliena).
+    - `"casilla"`: `True` (encendida) o `False` (apagada).
+    - `"opcion"`: el estado encendido de uno de los botones del grupo;
+      los demas botones quedan apagados.
+    - `"lista"`: una de las opciones del campo.
+    - Se escribe en TODOS los widgets del campo (el mismo nombre puede
+      aparecer en varias paginas) y a cada uno se le llama
+      `widget.update()`, que regenera la apariencia para que el valor
+      se vea en cualquier visor.
+    - Lanza `ValueError` (sin tocar el documento) si el campo es de
+      firma, de solo lectura, no existe en el documento, o si el valor
+      no es valido para el tipo del campo.
+    """
+    tipo = campo["tipo"]
+    if tipo == "firma":
+        raise ValueError(
+            f"El campo '{campo['nombre']}' es de firma y no se puede "
+            "llenar aqui."
+        )
+    if campo["solo_lectura"]:
+        raise ValueError(
+            f"El campo '{campo['nombre']}' es de solo lectura y no se "
+            "puede modificar."
+        )
+    _validar_valor(campo, valor)
+    escritos = _escribir_en_widgets(documento, campo, tipo, valor)
+    if not escritos:
+        raise ValueError(
+            f"El campo '{campo['nombre']}' no se encuentra en el "
+            "documento."
+        )
 
 
 # ---------------------------------------------------------------------
@@ -138,34 +185,28 @@ def _nuevo_campo(widget, tipo):
     }
 
 
-def _campo_de_grupo(campos, indices_grupos, widget):
-    """Regresa el campo de un grupo de botones de opcion.
+def _agregar_aparicion(campo, widget, tipo):
+    """Agrega al campo otro widget que tiene su mismo nombre.
 
-    Si el nombre ya se ha visto (es otro boton del mismo grupo) se
-    agregan su estado encendido a las opciones y su valor al campo; si
-    no, se crea el campo nuevo y se anota su posicion en
-    `indices_grupos`.
+    El valor, las opciones y las banderas del diccionario salen del
+    PRIMER widget encontrado (todos los widgets de un mismo nombre
+    comparten el valor en el PDF); aqui solo se actualiza lo que puede
+    cambiar entre apariciones:
+
+    - `"opcion"`: se agrega el estado encendido del boton a las opciones
+      (sin repetir) y, si el boton esta encendido, esa es la opcion
+      elegida del grupo.
+    - Solo lectura: el grupo es de solo lectura si todas sus
+      apariciones lo son.
     """
-    if widget.field_name in indices_grupos:
-        campo = campos[indices_grupos[widget.field_name]]
-        _agregar_boton_al_grupo(campo, widget)
-        return campo
-    campo = _nuevo_campo(widget, "opcion")
-    campos.append(campo)
-    indices_grupos[widget.field_name] = len(campos) - 1
-    return campo
-
-
-def _agregar_boton_al_grupo(campo, widget):
-    """Agrega otro boton de opcion a un grupo ya existente."""
-    estado = _estado_encendido(widget)
-    if estado not in campo["opciones"]:
-        campo["opciones"].append(estado)
-    # Si este boton esta encendido, esa es la opcion elegida del grupo.
-    valor = widget.field_value
-    if valor and valor != "Off":
-        campo["valor"] = str(valor)
-    # El grupo es de solo lectura si todos sus botones lo son.
+    if tipo == "opcion":
+        estado = _estado_encendido(widget)
+        if estado not in campo["opciones"]:
+            campo["opciones"].append(estado)
+        # Si este boton esta encendido, esa es la opcion del grupo.
+        valor = widget.field_value
+        if valor and valor != "Off":
+            campo["valor"] = str(valor)
     campo["solo_lectura"] = campo["solo_lectura"] and bool(
         widget.field_flags & PDF_FIELD_IS_READ_ONLY
     )
@@ -196,7 +237,7 @@ def _opciones_de_widget(widget, tipo):
 
     - `"lista"`: las opciones que trae el PDF (`choice_values`).
     - `"opcion"`: el estado encendido de este boton (una sola opcion por
-      ahora; las demas se agregan con `_agregar_boton_al_grupo`).
+      ahora; las demas se agregan con `_agregar_aparicion`).
     - Los demas tipos: lista vacia.
     """
     if tipo == "lista":
@@ -218,6 +259,72 @@ def _estado_encendido(widget):
     if not estado or estado is True:
         return "Yes"
     return str(estado)
+
+
+def _validar_valor(campo, valor):
+    """Lanza `ValueError` si `valor` no es valido para el tipo del campo.
+
+    - `"texto"`: debe ser un string.
+    - `"casilla"`: debe ser `True` o `False`.
+    - `"opcion"` y `"lista"`: debe ser una de las `opciones` del campo.
+    """
+    tipo = campo["tipo"]
+    nombre = campo["nombre"]
+    if tipo == "texto" and not isinstance(valor, str):
+        raise ValueError(
+            f"El campo '{nombre}' es de texto: el valor debe ser un "
+            f"string, no {type(valor).__name__}."
+        )
+    if tipo == "casilla" and not isinstance(valor, bool):
+        raise ValueError(
+            f"El campo '{nombre}' es de casilla: el valor debe ser "
+            "True o False."
+        )
+    if tipo in ("opcion", "lista") and valor not in campo["opciones"]:
+        raise ValueError(
+            f"El valor '{valor}' no es una opcion valida para el campo "
+            f"'{nombre}': opciones {campo['opciones']}."
+        )
+
+
+def _escribir_en_widgets(documento, campo, tipo, valor):
+    """Escribe `valor` en cada widget del campo y regenera su
+    apariencia. Devuelve cuantos widgets se escribieron.
+
+    Se busca cada widget por su `xref` (uno por cada aparicion registrada
+    en `campo`), recorriendo solo las paginas donde aparece. La pagina
+    se guarda en una variable mientras se escribe: PyMuPDF solo deja
+    llamar a `widget.update()` mientras su pagina esta viva en memoria.
+    """
+    escritos = 0
+    for num_pagina, xref in zip(campo["paginas"], campo["xrefs"]):
+        pagina = documento[num_pagina]
+        for widget in pagina.widgets():
+            if widget.xref == xref:
+                _asignar_valor(widget, tipo, valor)
+                widget.update()
+                escritos += 1
+                break
+    return escritos
+
+
+def _asignar_valor(widget, tipo, valor):
+    """Pone `valor` en un widget y prepara su apariencia.
+
+    - `"casilla"`: PyMuPDF acepta `True`/`False` y traduce al estado
+      encendido del PDF (normalmente `"Yes"`) o a `"Off"`.
+    - `"opcion"`: solo el boton cuyo estado encendido coincide con
+      `valor` se enciende; los demas botones del grupo se apagan
+      (PyMuPDF no lo hace solo: si no, todos quedarian encendidos).
+    - Los demas tipos: el valor va tal cual al campo.
+    """
+    if tipo == "opcion":
+        if widget.on_state() == valor:
+            widget.field_value = valor
+        else:
+            widget.field_value = False
+        return
+    widget.field_value = valor
 
 
 def _hay_xfa(documento):
