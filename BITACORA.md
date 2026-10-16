@@ -1335,6 +1335,76 @@ las tareas 3 y 4.
 
 ---
 
+## Sesión 23 — 2026-10-16
+
+**Objetivo de la sesión:** Continuar la Fase 5 con la Tarea 3 del diseño
+`DISENO_FORMULARIOS.md`: el panel lateral de campos, más una corrección
+en `_asignar_valor` (comparar con `_estado_encendido(widget)` y no con
+`widget.on_state()`).
+
+**Actividades realizadas:**
+
+1. **Corrección en `app/formularios.py`:**
+   - `_asignar_valor` (líneas 311–331): para los grupos de opción ahora
+     compara `_estado_encendido(widget) == valor` (línea 326) y no
+     `widget.on_state() == valor`. El caso: cuando el PDF no define
+     estado On en la apariencia del botón, `on_state()` devuelve `True`
+     (PyMuPDF avisa) y `listar_campos` registra la opción como `"Yes"`;
+     al escribir, `True == "Yes"` nunca coincidía y el botón quedaba
+     apagado. Se pudo reproducir con un PDF de prueba (helper
+     `_pdf_opcion_sin_estado_on` en las pruebas) y se confirmó que, con
+     el fix, el valor `"Yes"` persiste tras `tobytes()`.
+2. **`app/panel_formularios.py` (nuevo):**
+   - `PanelFormularios(QDockWidget)` (línea 60), título "Campos del
+     formulario", con `QScrollArea` y `QGridLayout`: una fila por campo
+     (nombre + control). Señal `valor_cambiado(nombre, valor)`
+     (`Signal(str, object)`, línea 77).
+   - Controles por tipo (líneas 152–212): texto → `QLineEdit`
+     (`editingFinished`) o `_TextoMultilinea(QPlainTextEdit)` (línea 45,
+     emite `terminado` al perder el foco); casilla → `QCheckBox`
+     (`toggled`); opción → un `QRadioButton` por opción en una caja
+     (`_crear_opciones`, línea 214; Qt los toma como grupo exclusivo);
+     lista → `QComboBox`; firma → etiqueta "Firma (no editable aqui)".
+     Los campos de solo lectura salen deshabilitados (líneas 145–147).
+   - `cargar(campos)` (línea 101): vacía el grid y reconstruye las
+     filas; mientras arma cada control usa `blockSignals` para no
+     emitir `valor_cambiado` con los valores iniciales.
+   - `seleccionar(nombre)` (línea 122): resalta la fila
+     (`_pintar_fila`, línea 250), le da foco al control y la trae a la
+     vista con `ensureWidgetVisible`.
+   - `controles[nombre]` (público) guarda los widgets de cada campo
+     (varios en los grupos de opción), al estilo de `BarraFormato`.
+3. **Pruebas:**
+   - `tests/test_formularios.py` (14 en total): ayudante
+     `_pdf_opcion_sin_estado_on` (línea 184, reescribe el AP del botón
+     para que `on_state()` sea `True`) y
+     `test_escribir_valor_enciende_boton_sin_estado_on` (línea 508):
+     con el fix el botón queda en `"Yes"`; sin él quedaba `"Off"`.
+   - `tests/test_panel_formularios.py` (nuevo, 7 pruebas, línea 116 en
+     adelante): control correcto por tipo (incluidos los dos botones
+     "Si"/"No" del grupo), solo lectura deshabilitado, `cargar()` no
+     emite señales, marcar casilla emite una sola vez, elegir opción
+     emite su estado, `seleccionar()` resalta y da foco (en offscreen
+     hay que llamar `QApplication.setActiveWindow`, deprecada, porque
+     la ventana nunca queda activa sola), y nombre desconocido no
+     truena.
+4. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt y `PDF_ENCRYPT_AES_256`), 0 errores
+   nuevos; **pytest** → 57/57 en verde (8 nuevas).
+
+**Resultado:** El panel lateral `PanelFormularios` muestra una fila por
+campo del formulario con el control adecuado (texto, casilla, opciones,
+lista y firma), emite `valor_cambiado` solo por acción del usuario y
+sabe resaltar y enfocar un campo; con la corrección de `_asignar_valor`
+también se llenan los botones de opción de PDFs mal formados (sin
+estado On). Lista la base para conectarlo en `main.py`.
+
+**Pendiente:**
+- Tarea 4: conectar el panel en `app/main.py` (menú, escritura con
+  deshacer, clic en la página).
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

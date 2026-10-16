@@ -8,6 +8,8 @@ El import va sin prefijo de paquete (from formularios import ...) porque
 asi corre el programa.
 """
 
+import re
+
 import fitz
 import pytest
 
@@ -177,6 +179,44 @@ def _pdf_xfa():
         documento.pdf_catalog(), "AcroForm", f"{xref_acroform} 0 R"
     )
     return documento
+
+
+def _pdf_opcion_sin_estado_on():
+    """PDF en memoria con un boton de opcion sin estado On en su
+    apariencia (AP).
+
+    La apariencia normal (N) y la presionada (D) quedan solo con
+    /Off, como en PDFs reales mal formados: ahi PyMuPDF no encuentra el
+    estado encendido, avisa "radio button has no 'On' value" y
+    `on_state()` devuelve `True` (no un string). `listar_campos` lo
+    registra igual como la opcion "Yes", que es el estandar.
+    """
+    documento = fitz.open()
+    pagina = documento.new_page(width=595, height=842)
+    widget = _nuevo_widget(
+        field_name="genero",
+        field_type=PDF_WIDGET_TYPE_RADIOBUTTON,
+        rect=fitz.Rect(72, 240, 90, 258),
+        # Sin esto, PyMuPDF no crea el boton de opcion.
+        field_value=False,
+    )
+    anotacion = pagina.add_widget(widget)
+    # Se reescribe AP entero con la MISMA referencia /Off que ya
+    # traia el boton, tanto en N como en D.
+    tipo, valor = documento.xref_get_key(anotacion.xref, "AP/N")
+    assert tipo == "dict"
+    coincidencia = re.search(r"/Off (\d+ \d+ R)", valor)
+    assert coincidencia is not None
+    referencia = coincidencia.group(1)
+    documento.xref_set_key(
+        anotacion.xref,
+        "AP",
+        f"<< /N << /Off {referencia} >> /D << /Off {referencia} >> >>",
+    )
+    # Se guarda y se reabre: el grupo queda en el PDF.
+    datos = documento.tobytes()
+    documento.close()
+    return fitz.open(stream=datos, filetype="pdf")
 
 
 def _pdf_texto_en_dos_paginas():
@@ -463,3 +503,33 @@ def test_escribir_valor_en_firma_lanza_error():
             escribir_valor(documento, firma, "cualquier cosa")
     finally:
         documento.close()
+
+
+def test_escribir_valor_enciende_boton_sin_estado_on():
+    """Un boton de opcion cuyo AP no tiene estado On (`on_state()`
+    devuelve `True`) se enciende con "Yes", la opcion que lista
+    `listar_campos`."""
+    documento = _pdf_opcion_sin_estado_on()
+    try:
+        # La advertencia de PyMuPDF aparece en la salida de la prueba.
+        campos = listar_campos(documento)
+        grupo = _campo_de("genero", campos)
+        assert grupo["opciones"] == ["Yes"]
+        # Ningun estado On: el grupo arranca apagado.
+        assert grupo["valor"] == ""
+
+        escribir_valor(documento, grupo, "Yes")
+        datos = documento.tobytes()
+    finally:
+        documento.close()
+
+    reabierto = fitz.open(stream=datos, filetype="pdf")
+    try:
+        pagina = reabierto[0]
+        widget = next(iter(pagina.widgets()))
+        # Con getattr porque PyMuPDF no anota el tipo de "field_value"
+        # y pyright lo ve como Annot. Antes del fix el boton quedaba
+        # en "Off": on_state() devolvia True y nunca coincidia.
+        assert getattr(widget, "field_value") == "Yes"
+    finally:
+        reabierto.close()

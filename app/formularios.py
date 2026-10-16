@@ -316,10 +316,14 @@ def _asignar_valor(widget, tipo, valor):
     - `"opcion"`: solo el boton cuyo estado encendido coincide con
       `valor` se enciende; los demas botones del grupo se apagan
       (PyMuPDF no lo hace solo: si no, todos quedarian encendidos).
+      La comparacion se hace con `_estado_encendido`, igual que en
+      `listar_campos`: si `on_state()` devuelve `True` (boton sin
+      estado On definido), la opcion registrada es `"Yes"` y comparar
+      con `on_state()` directamente nunca coincidiria.
     - Los demas tipos: el valor va tal cual al campo.
     """
     if tipo == "opcion":
-        if widget.on_state() == valor:
+        if _estado_encendido(widget) == valor:
             widget.field_value = valor
         else:
             widget.field_value = False
