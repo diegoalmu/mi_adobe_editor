@@ -241,3 +241,66 @@ def test_seleccionar_con_nombre_desconocido_no_hace_nada():
     panel.cargar(_campos_de_prueba())
     panel.seleccionar("no_existe")
     assert panel._resaltado is None
+
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+def test_texto_sin_cambios_no_emite_al_perder_el_foco():
+    """Dar y quitar el foco sin editar no emite; cambiar el texto si.
+
+    Si emitiera igual, recorrer el formulario con Tab llenaria el
+    historial de Deshacer con pasos vacios.
+    """
+    panel = PanelFormularios()
+    panel.cargar(_campos_de_prueba())
+    panel.show()
+    QApplication.setActiveWindow(panel)
+    recibidos = []
+    panel.valor_cambiado.connect(
+        lambda nombre, valor: recibidos.append((nombre, valor))
+    )
+    texto = panel.controles["nombre_cliente"][0]
+
+    # Solo enfocar y desenfocar, sin tocar el texto: no hay cambio.
+    texto.setFocus()
+    assert texto.hasFocus()
+    texto.clearFocus()
+    assert recibidos == []
+
+    # Cambiar el texto si emite, y solo una vez.
+    texto.setFocus()
+    texto.setText("Ana")
+    texto.clearFocus()
+    assert recibidos == [("nombre_cliente", "Ana")]
+
+    # Enfocar otra vez sin editar: el texto ya es el ultimo conocido.
+    texto.setFocus()
+    texto.clearFocus()
+    assert recibidos == [("nombre_cliente", "Ana")]
+
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+def test_multilinea_sin_cambios_no_emite_al_perder_el_foco():
+    """Lo mismo en el campo multilnea (el _TextoMultilinea)."""
+    panel = PanelFormularios()
+    panel.cargar(_campos_de_prueba())
+    panel.show()
+    QApplication.setActiveWindow(panel)
+    recibidos = []
+    panel.valor_cambiado.connect(
+        lambda nombre, valor: recibidos.append((nombre, valor))
+    )
+    multilinea = panel.controles["observaciones"][0]
+
+    multilinea.setFocus()
+    assert multilinea.hasFocus()
+    multilinea.clearFocus()
+    assert recibidos == []
+
+    multilinea.setFocus()
+    multilinea.setPlainText("Una observacion")
+    multilinea.clearFocus()
+    assert recibidos == [("observaciones", "Una observacion")]
+
+    multilinea.setFocus()
+    multilinea.clearFocus()
+    assert recibidos == [("observaciones", "Una observacion")]

@@ -22,6 +22,12 @@ o lista) y quien lo use escribe con `formularios.escribir_valor`
 bloquea las senales de los controles, para que el valor inicial de
 cada campo no se cuente como un cambio del usuario.
 
+Los campos de texto guardan su ULTIMO valor conocido (el que traian
+al cargar, y el de cada emision) y solo emiten `valor_cambiado` cuando
+el texto es distinto: asi dar y quitar el foco sin editar (por ejemplo
+recorriendo el formulario con Tab) no llena el historial de Deshacer
+con pasos vacios.
+
 El codigo usa nombres COMPLETOS de los enums de Qt donde haga falta,
 igual que el resto del programa, para que pyright no se queje.
 """
@@ -66,12 +72,15 @@ class PanelFormularios(QDockWidget):
     - `valor_cambiado(nombre, valor)` se emite al terminar de editar
       un texto (pierde el foco), o al marcar una casilla, elegir una
       opcion o una opcion de la lista. El valor es un string, o un
-      bool en las casillas.
+      bool en las casillas. En los campos de texto SOLO se emite si
+      el texto cambio respecto al ultimo valor conocido del campo.
     - `seleccionar(nombre)` resalta la fila del campo y le da foco a
       su control (para enlazarlo con un clic en la pagina).
     - `controles[nombre]` es la lista de widgets de ese campo (uno en
       todos los tipos, y varios en `"opcion"`: un boton por opcion);
       lo usan main.py y las pruebas.
+    - `_ultimos_textos[nombre]` es el ultimo texto conocido de cada
+      campo de texto (el que traia al cargar y el de cada emision).
     """
 
     valor_cambiado = Signal(str, object)
@@ -86,6 +95,7 @@ class PanelFormularios(QDockWidget):
         self.setObjectName("panel_formularios")
         self.controles = {}
         self._etiquetas = {}
+        self._ultimos_textos = {}
         self._resaltado = None
         self._tabla = QGridLayout()
         self._tabla.setHorizontalSpacing(8)
@@ -104,7 +114,9 @@ class PanelFormularios(QDockWidget):
         `campos` es la lista de `formularios.listar_campos`. Las
         senales de los controles quedan bloqueadas mientras se arma
         cada fila, para no emitir `valor_cambiado` con los valores
-        iniciales (solo el usuario puede cambiarlos).
+        iniciales (solo el usuario puede cambiarlos); ademas, cada
+        valor inicial queda guardado como el primer ultimo valor
+        conocido del campo de texto.
         """
         while self._tabla.count():
             item = self._tabla.takeAt(0)
@@ -115,6 +127,7 @@ class PanelFormularios(QDockWidget):
                 widget.deleteLater()
         self.controles.clear()
         self._etiquetas.clear()
+        self._ultimos_textos.clear()
         self._resaltado = None
         for num_fila, campo in enumerate(campos):
             self._agregar_fila(num_fila, campo)
@@ -164,7 +177,7 @@ class PanelFormularios(QDockWidget):
                 control = _TextoMultilinea()
                 control.terminado.connect(
                     lambda n=nombre, c=control:
-                        self.valor_cambiado.emit(n, c.toPlainText())
+                        self._al_terminar_texto(n, c.toPlainText())
                 )
                 # QPlainTextEdit no tiene setText: usa setPlainText.
                 fijar_texto = control.setPlainText
@@ -172,13 +185,16 @@ class PanelFormularios(QDockWidget):
                 control = QLineEdit()
                 control.editingFinished.connect(
                     lambda n=nombre, c=control:
-                        self.valor_cambiado.emit(n, c.text())
+                        self._al_terminar_texto(n, c.text())
                 )
                 fijar_texto = control.setText
-            # El valor inicial no debe disparar la senal.
+            # El valor inicial no debe disparar la senal, y ademas es
+            # el primer ultimo valor conocido del campo: sin esto, el
+            # primer Tab sobre el campo emitiria un cambio vacio.
             control.blockSignals(True)
             fijar_texto(campo["valor"])
             control.blockSignals(False)
+            self._ultimos_textos[nombre] = str(campo["valor"])
             return control, [control]
         if tipo == "casilla":
             control = QCheckBox()
@@ -240,6 +256,20 @@ class PanelFormularios(QDockWidget):
         for boton in botones:
             disposicion.addWidget(boton)
         return caja, botones
+
+    def _al_terminar_texto(self, nombre, texto):
+        """Emite `valor_cambiado` SOLO si el texto cambio.
+
+        Los campos de texto (QLineEdit y _TextoMultilinea) avisan
+        tambien cuando el usuario solo les dio el foco y se fue sin
+        editar; en ese caso no se emite nada. El ultimo valor conocido
+        se guarda al cargar el campo y despues de cada emision, para
+        comparar con el texto actual.
+        """
+        if self._ultimos_textos.get(nombre, "") == texto:
+            return
+        self._ultimos_textos[nombre] = texto
+        self.valor_cambiado.emit(nombre, texto)
 
     def _al_elegir_opcion(self, encendido, boton, nombre):
         """Emite `valor_cambiado` cuando se enciende un boton de

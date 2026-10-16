@@ -1405,6 +1405,98 @@ estado On). Lista la base para conectarlo en `main.py`.
 
 ---
 
+## Sesión 24 — 2026-10-16
+
+**Objetivo de la sesión:** Continuar la Fase 5 con la Tarea 4 del diseño
+`DISENO_FORMULARIOS.md`: conectar el panel de formularios en
+`app/main.py` (menú, escritura con deshacer, clic en la página), más una
+corrección en `app/panel_formularios.py` para que los campos de texto no
+emitan cambios vacíos.
+
+**Actividades realizadas:**
+
+1. **Corrección en `app/panel_formularios.py`:**
+   - Nuevo atributo `_ultimos_textos` (línea 98): el último valor
+     conocido de cada campo de texto; se vacía en `cargar` (línea 130)
+     y se guarda al armar cada fila de texto (línea 197, con el valor
+     inicial que trae el PDF).
+   - `_crear_controles` (línea 165): los `QLineEdit` (`editingFinished`)
+     y los `_TextoMultilinea` (`terminado`) ya no emiten directo, sino
+     que pasan por `_al_terminar_texto` (línea 260), que compara con el
+     último valor conocido y solo emite `valor_cambiado` si el texto
+     cambió; después de emitir guarda el texto nuevo. Así, dar y quitar
+     el foco sin editar (por ejemplo recorriendo el formulario con Tab)
+     no llena el historial de Deshacer con pasos vacíos.
+2. **`app/main.py` (Tarea 4):**
+   - Docstring del programa (línea 16) e imports (líneas 56 y 58):
+     `formularios.escribir_valor`, `es_solo_xfa`, `listar_campos` y
+     `panel_formularios.PanelFormularios`.
+   - `__init__` (líneas 353–364): se crea el dock
+     `PanelFormularios` a la derecha (`Qt.DockWidgetArea.RightDockWidgetArea`),
+     oculto, con `valor_cambiado` conectado a `al_cambiar_valor_campo`.
+   - `crear_menu_formularios` (línea 580): menú **"Formularios"** con la
+     acción **"Mostrar campos"** conmutable (`toggled` → mostrar/ocultar
+     el panel, `visibilityChanged` → mantener la casilla sincronizada
+     con el botón X del dock); arranca deshabilitada y se activa sola
+     cuando el PDF tiene campos. Se llama desde `crear_menu_archivo`
+     (línea 420).
+   - `al_cambiar_valor_campo` (línea 605): si el valor es igual al que
+     ya tiene el campo en el documento no registra cambio ni escribe
+     nada (compara en `_valor_ya_esta_en_el_documento`, línea 655);
+     si es distinto registra `"Llenar campo: <nombre>"` antes de
+     escribir con `escribir_valor` y redibuja cada página del campo
+     (`campo["paginas"]`); si falla, `_revertir_cambio_fallido()` (que
+     recarga el panel) y `QMessageBox.critical`.
+   - `_campo_de_formulario` (línea 646), `_recargar_panel_formularios`
+     (línea 667, devuelve los campos cargados y habilita/deshabilita
+     la acción) y `_mostrar_panel_formularios` (línea 683).
+   - `cargar_documento` (líneas 833–841): si el PDF es solo XFA avisa
+     "Este formulario usa XFA y no se puede llenar con este programa";
+     recarga el panel y lo muestra a la derecha si hay campos, u oculta
+     si no los hay.
+   - `_restaurar_documento` (línea 553): después de deshacer o rehacer
+     el panel se vuelve a cargar con los valores restaurados.
+   - `al_seleccionar_rectangulo` (línea 998) y
+     `_seleccionar_campo_en_punto` (línea 688): con la herramienta
+     "Ninguna (solo ver)", un clic sobre un campo de la página lo
+     selecciona y resalta en el panel.
+   - `cerrar_documento` (líneas 1970–1971): el panel se vacía y se
+     oculta.
+3. **Pruebas:**
+   - `tests/test_panel_formularios.py` (9 en total, +2 en las líneas
+     247 y 282): dar y quitar el foco sin cambiar el texto no emite
+     `valor_cambiado` (ni en el `QLineEdit` ni en el `_TextoMultilinea`);
+     cambiarlo sí emite una sola vez, y volver a enfocar sin editar no
+     vuelve a emitir.
+   - `tests/test_main_formularios.py` (nuevo, 4 pruebas): llenar un
+     campo de texto desde el panel escribe en el documento y `Ctrl+Z`
+     deja el documento y el panel vacíos; avisar un valor igual al del
+     documento no registra cambio ni escribe; un clic sobre un campo
+     (herramienta "Ninguna") lo resalta en el panel; abrir con campos
+     muestra el panel y la acción, sin campos los oculta/apaga, la
+     acción conmutable oculta y muestra, y cerrar el documento vacía y
+     oculta el panel.
+4. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt, `Document` vs `Iterable`,
+   `PDF_ENCRYPT_AES_256`, `pixmap_limpio`), 0 errores nuevos (el código
+   nuevo usa enums completos como `Qt.DockWidgetArea.RightDockWidgetArea`);
+   **pytest** → 63/63 en verde (6 nuevas).
+
+**Resultado:** El formulario se puede llenar desde el panel lateral: con
+un PDF con campos el panel se muestra solo, cada cambio escribe en el
+PDF y se redibuja la página (con Deshacer y Rehacer), un clic sobre un
+campo lo identifica en el panel, y ni el Tab ni los valores repetidos
+ensucian el historial de Deshacer.
+
+**Pendiente:**
+- Validación visual de Diego con un formulario PDF real (llenar texto,
+  casillas y listas, guardar con "Guardar como" y abrir el resultado en
+  Edge o Chrome).
+- Tarea 5: documentación (README, ROADMAP, BITACORA y marcar el diseño
+  como completado).
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
