@@ -42,10 +42,25 @@ Cada fase es una entrega funcional. No pasamos a la siguiente hasta que la actua
   4. La fuente original del PDF no se conserva; se usa una de las 5 tipografías de
      la lista (Arial, Times New Roman, Calibri, Verdana, Courier New).
 
-## Fase 5 — Formularios (sin empezar)
-- Detectar campos de formulario existentes y rellenarlos
-- Crear campos de formulario nuevos (texto, checkbox, firma)
-- [ ] Pendiente: es la siguiente fase en la lista
+## Fase 5 — Formularios (parte 1 completada)
+- [x] Detectar campos de formulario existentes y rellenarlos (plan `DISENO_FORMULARIOS.md`,
+  Tareas 1–5): panel lateral "Campos del formulario" con un control por tipo
+  (texto, casilla, opción, lista y firma como texto no editable), escritura en
+  el PDF con su paso de Deshacer/Rehacer, selección del campo al hacer clic
+  sobre él en la página y aviso si el formulario es solo XFA
+- [ ] Pendiente (parte 2): crear campos de formulario nuevos (texto, casilla,
+  firma)
+- **Limitaciones conocidas de los formularios:**
+  1. No se pueden crear campos nuevos todavía (parte 2): solo se llenan los que
+     el PDF ya trae.
+  2. Formularios XFA (formato viejo de Adobe LiveCycle): si el PDF solo tiene
+     XFA, el programa avisa que no se puede llenar con él.
+  3. No se ejecuta el JavaScript del formulario: si en Acrobat un campo calcula
+     un total automáticamente, aquí no.
+  4. Los campos de firma se listan como "Firma (no editable aquí)": no se firma
+     con certificado (eso sigue pendiente en la Fase 7).
+  5. No se aplana el formulario: al guardar, los campos siguen siendo campos y
+     se pueden seguir llenando en cualquier otro visor.
 
 ## Fase 6 — OCR y conversión (parcialmente completado)
 - [x] OCR de PDFs escaneados (ocrmypdf + Tesseract, español e inglés)

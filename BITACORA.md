@@ -1218,6 +1218,339 @@ deshaciendo solo la copia registrada.
 
 ---
 
+## Sesión 21 — 2026-10-15
+
+**Objetivo de la sesión:** Empezar la Fase 5 (llenar formularios PDF)
+con la Tarea 1 del diseño `DISENO_FORMULARIOS.md`: el módulo
+`app/formularios.py` para leer los campos que ya trae un PDF.
+
+**Actividades realizadas:**
+
+1. **`AGENTS.md`:** la línea "Plan vigente" ahora apunta a
+   `DISENO_FORMULARIOS.md` (antes decía `DISENO_DESHACER.md`).
+2. **`app/formularios.py` (nuevo):** funciones puras sobre PyMuPDF,
+   sin ventanas:
+   - `listar_campos(documento)` (líneas 39–76): recorre las páginas con
+     `pagina.widgets()`, traduce cada tipo de PyMuPDF al nombre del
+     diseño (`"texto"`, `"casilla"`, `"opcion"`, `"lista"`, `"firma"`)
+     y devuelve un diccionario por campo con `nombre`, `tipo`, `valor`,
+     `opciones`, `solo_lectura`, `multilinea`, `paginas`, `rects` y
+     `xrefs`. Los botones de opción que comparten nombre se agrupan en
+     un solo campo (páginas/rects/xrefs por cada botón, opciones = el
+     estado encendido de cada uno); los botones de acción no se listan.
+   - `tiene_formulario(documento)` (líneas 79–81): `True` si hay al
+     menos un campo listable.
+   - `es_solo_xfa(documento)` (líneas 84–91): `True` si el AcroForm
+     declara XFA y no hay campos normales (detecta XFA con
+     `xref_get_key`, tanto si el AcroForm es objeto indirecto como si
+     está escrito en el catálogo).
+   - Banderas: solo lectura = `PDF_FIELD_IS_READ_ONLY` (bit 0) y
+     multilínea = `PDF_TX_FIELD_IS_MULTILINE` (bit 13).
+3. **`tests/test_formularios.py` (nuevo):** 7 pruebas que crean sus
+   PDFs en memoria con `fitz.Widget()` + `pagina.add_widget()`:
+   tipos/valores/opciones de cada campo, grupo de opción como un solo
+   campo con estados "Si"/"No" (se renombra el estado "Yes" que crea
+   PyMuPDF para simular grupos reales), multilínea y solo lectura,
+   páginas/rects/xrefs contra el widget real, PDF sin campos →
+   `tiene_formulario` es `False`, y detección de XFA (solo XFA →
+   `True`; con campos normales o sin XFA → `False`).
+4. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt y `PDF_ENCRYPT_AES_256`), 0 errores
+   nuevos; **pytest** → 43/43 en verde (7 nuevas). Para que pyright no
+   marcara cosas nuevas, las constantes de PyMuPDF se importan de
+   `pymupdf.mupdf` (donde están declaradas) y en las pruebas las
+   propiedades del widget se asignan con `setattr` en un solo
+   ayudante.
+
+**Resultado:** El programa ya puede leer los campos de un formulario
+PDF (texto, casillas, grupos de opción, listas y firmas) y detectar los
+formularios XFA que no se pueden llenar; esto es la base del panel de
+las tareas 2 a 4.
+
+**Pendiente:**
+- Tarea 2: `escribir_valor(documento, campo, valor)` con sus pruebas.
+
+---
+
+## Sesión 22 — 2026-10-15
+
+**Objetivo de la sesión:** Continuar la Fase 5 con la Tarea 2 del diseño
+`DISENO_FORMULARIOS.md`: escribir valores en los campos, más la corrección
+de `listar_campos` para agrupar por `field_name` todos los tipos (no solo
+los botones de opción).
+
+**Actividades realizadas:**
+
+1. **`app/formularios.py`:**
+   - `listar_campos` (líneas 44–86): ahora agrupa por `field_name` TODOS
+     los tipos con un diccionario (`indices_por_nombre`, línea 68): un
+     campo de texto, casilla o lista que aparece en varias páginas (por
+     ejemplo el nombre en el encabezado de cada hoja) sale una sola vez,
+     con todas sus `paginas`, `rects` y `xrefs`. Se reemplazaron
+     `_campo_de_grupo` y `_agregar_boton_al_grupo` por
+     `_agregar_aparicion` (líneas 188–212), que además de las opciones
+     del grupo mantiene el solo-lectura como AND de todas las
+     apariciones.
+   - `escribir_valor(documento, campo, valor)` (líneas 104–138): escribe
+     el valor en TODOS los widgets del campo y llama `widget.update()`
+     en cada uno. Lanza `ValueError` con mensaje en español (sin tocar
+     el documento) si el campo es de firma, de solo lectura, no existe
+     en el documento, o si el valor no es válido para su tipo.
+   - Internos nuevos: `_validar_valor` (líneas 264–287; texto → string,
+     casilla → bool, opción/lista → una de las opciones),
+     `_escribir_en_widgets` (líneas 290–308; busca cada widget por su
+     `xref` y lo escribe mientras su página viva en memoria: PyMuPDF
+     solo permite `update()` con la página viva) y `_asignar_valor`
+     (líneas 311–327; en grupos de opción solo enciende el botón cuyo
+     `on_state()` coincide y apaga los demás, porque PyMuPDF no los
+     apaga solo).
+2. **`tests/test_formularios.py`:** 6 pruebas nuevas (13 en total):
+   - `test_campo_repetido_en_dos_paginas_sale_una_sola_vez` (línea 336)
+     y `test_escribir_valor_actualiza_todos_los_widgets_del_campo`
+     (línea 392): un texto con el mismo nombre en dos páginas sale una
+     sola vez en `listar_campos` y, al escribirlo, ambos widgets quedan
+     con el valor nuevo después de `tobytes()` y reabrir.
+   - `test_escribir_valor_llena_los_tipos_y_persisten_al_guardar`
+     (línea 354): texto, multilínea, casilla, opción y lista persisten
+     al guardar y reabrir.
+   - `test_escribir_valor_invalido_en_lista_lanza_error` (línea 420),
+     `test_escribir_valor_en_solo_lectura_lanza_error` (línea 437) y
+     `test_escribir_valor_en_firma_lanza_error` (línea 454): lanzan
+     `ValueError` sin modificar el documento.
+   - Ayudante `_pdf_texto_en_dos_paginas` (línea 182): crea dos páginas
+     y recarga cada una con `documento[n]` (al crear la segunda página,
+     PyMuPDF invalida el enlace de la primera).
+3. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt y `PDF_ENCRYPT_AES_256`), 0 errores
+   nuevos; **pytest** → 49/49 en verde (6 nuevas).
+
+**Resultado:** `app/formularios.py` ya lee y escribe los campos de un
+formulario PDF: texto (incluidos repetidos en varias páginas),
+casillas, grupos de opción, listas y firmas, con validación de valores
+y regeneración de apariencia; esto completa la base para el panel de
+las tareas 3 y 4.
+
+**Pendiente:**
+- Tarea 3: `app/panel_formularios.py` (`PanelFormularios(QDockWidget)`).
+
+---
+
+## Sesión 23 — 2026-10-16
+
+**Objetivo de la sesión:** Continuar la Fase 5 con la Tarea 3 del diseño
+`DISENO_FORMULARIOS.md`: el panel lateral de campos, más una corrección
+en `_asignar_valor` (comparar con `_estado_encendido(widget)` y no con
+`widget.on_state()`).
+
+**Actividades realizadas:**
+
+1. **Corrección en `app/formularios.py`:**
+   - `_asignar_valor` (líneas 311–331): para los grupos de opción ahora
+     compara `_estado_encendido(widget) == valor` (línea 326) y no
+     `widget.on_state() == valor`. El caso: cuando el PDF no define
+     estado On en la apariencia del botón, `on_state()` devuelve `True`
+     (PyMuPDF avisa) y `listar_campos` registra la opción como `"Yes"`;
+     al escribir, `True == "Yes"` nunca coincidía y el botón quedaba
+     apagado. Se pudo reproducir con un PDF de prueba (helper
+     `_pdf_opcion_sin_estado_on` en las pruebas) y se confirmó que, con
+     el fix, el valor `"Yes"` persiste tras `tobytes()`.
+2. **`app/panel_formularios.py` (nuevo):**
+   - `PanelFormularios(QDockWidget)` (línea 60), título "Campos del
+     formulario", con `QScrollArea` y `QGridLayout`: una fila por campo
+     (nombre + control). Señal `valor_cambiado(nombre, valor)`
+     (`Signal(str, object)`, línea 77).
+   - Controles por tipo (líneas 152–212): texto → `QLineEdit`
+     (`editingFinished`) o `_TextoMultilinea(QPlainTextEdit)` (línea 45,
+     emite `terminado` al perder el foco); casilla → `QCheckBox`
+     (`toggled`); opción → un `QRadioButton` por opción en una caja
+     (`_crear_opciones`, línea 214; Qt los toma como grupo exclusivo);
+     lista → `QComboBox`; firma → etiqueta "Firma (no editable aqui)".
+     Los campos de solo lectura salen deshabilitados (líneas 145–147).
+   - `cargar(campos)` (línea 101): vacía el grid y reconstruye las
+     filas; mientras arma cada control usa `blockSignals` para no
+     emitir `valor_cambiado` con los valores iniciales.
+   - `seleccionar(nombre)` (línea 122): resalta la fila
+     (`_pintar_fila`, línea 250), le da foco al control y la trae a la
+     vista con `ensureWidgetVisible`.
+   - `controles[nombre]` (público) guarda los widgets de cada campo
+     (varios en los grupos de opción), al estilo de `BarraFormato`.
+3. **Pruebas:**
+   - `tests/test_formularios.py` (14 en total): ayudante
+     `_pdf_opcion_sin_estado_on` (línea 184, reescribe el AP del botón
+     para que `on_state()` sea `True`) y
+     `test_escribir_valor_enciende_boton_sin_estado_on` (línea 508):
+     con el fix el botón queda en `"Yes"`; sin él quedaba `"Off"`.
+   - `tests/test_panel_formularios.py` (nuevo, 7 pruebas, línea 116 en
+     adelante): control correcto por tipo (incluidos los dos botones
+     "Si"/"No" del grupo), solo lectura deshabilitado, `cargar()` no
+     emite señales, marcar casilla emite una sola vez, elegir opción
+     emite su estado, `seleccionar()` resalta y da foco (en offscreen
+     hay que llamar `QApplication.setActiveWindow`, deprecada, porque
+     la ventana nunca queda activa sola), y nombre desconocido no
+     truena.
+4. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt y `PDF_ENCRYPT_AES_256`), 0 errores
+   nuevos; **pytest** → 57/57 en verde (8 nuevas).
+
+**Resultado:** El panel lateral `PanelFormularios` muestra una fila por
+campo del formulario con el control adecuado (texto, casilla, opciones,
+lista y firma), emite `valor_cambiado` solo por acción del usuario y
+sabe resaltar y enfocar un campo; con la corrección de `_asignar_valor`
+también se llenan los botones de opción de PDFs mal formados (sin
+estado On). Lista la base para conectarlo en `main.py`.
+
+**Pendiente:**
+- Tarea 4: conectar el panel en `app/main.py` (menú, escritura con
+  deshacer, clic en la página).
+
+---
+
+## Sesión 24 — 2026-10-16
+
+**Objetivo de la sesión:** Continuar la Fase 5 con la Tarea 4 del diseño
+`DISENO_FORMULARIOS.md`: conectar el panel de formularios en
+`app/main.py` (menú, escritura con deshacer, clic en la página), más una
+corrección en `app/panel_formularios.py` para que los campos de texto no
+emitan cambios vacíos.
+
+**Actividades realizadas:**
+
+1. **Corrección en `app/panel_formularios.py`:**
+   - Nuevo atributo `_ultimos_textos` (línea 98): el último valor
+     conocido de cada campo de texto; se vacía en `cargar` (línea 130)
+     y se guarda al armar cada fila de texto (línea 197, con el valor
+     inicial que trae el PDF).
+   - `_crear_controles` (línea 165): los `QLineEdit` (`editingFinished`)
+     y los `_TextoMultilinea` (`terminado`) ya no emiten directo, sino
+     que pasan por `_al_terminar_texto` (línea 260), que compara con el
+     último valor conocido y solo emite `valor_cambiado` si el texto
+     cambió; después de emitir guarda el texto nuevo. Así, dar y quitar
+     el foco sin editar (por ejemplo recorriendo el formulario con Tab)
+     no llena el historial de Deshacer con pasos vacíos.
+2. **`app/main.py` (Tarea 4):**
+   - Docstring del programa (línea 16) e imports (líneas 56 y 58):
+     `formularios.escribir_valor`, `es_solo_xfa`, `listar_campos` y
+     `panel_formularios.PanelFormularios`.
+   - `__init__` (líneas 353–364): se crea el dock
+     `PanelFormularios` a la derecha (`Qt.DockWidgetArea.RightDockWidgetArea`),
+     oculto, con `valor_cambiado` conectado a `al_cambiar_valor_campo`.
+   - `crear_menu_formularios` (línea 580): menú **"Formularios"** con la
+     acción **"Mostrar campos"** conmutable (`toggled` → mostrar/ocultar
+     el panel, `visibilityChanged` → mantener la casilla sincronizada
+     con el botón X del dock); arranca deshabilitada y se activa sola
+     cuando el PDF tiene campos. Se llama desde `crear_menu_archivo`
+     (línea 420).
+   - `al_cambiar_valor_campo` (línea 605): si el valor es igual al que
+     ya tiene el campo en el documento no registra cambio ni escribe
+     nada (compara en `_valor_ya_esta_en_el_documento`, línea 655);
+     si es distinto registra `"Llenar campo: <nombre>"` antes de
+     escribir con `escribir_valor` y redibuja cada página del campo
+     (`campo["paginas"]`); si falla, `_revertir_cambio_fallido()` (que
+     recarga el panel) y `QMessageBox.critical`.
+   - `_campo_de_formulario` (línea 646), `_recargar_panel_formularios`
+     (línea 667, devuelve los campos cargados y habilita/deshabilita
+     la acción) y `_mostrar_panel_formularios` (línea 683).
+   - `cargar_documento` (líneas 833–841): si el PDF es solo XFA avisa
+     "Este formulario usa XFA y no se puede llenar con este programa";
+     recarga el panel y lo muestra a la derecha si hay campos, u oculta
+     si no los hay.
+   - `_restaurar_documento` (línea 553): después de deshacer o rehacer
+     el panel se vuelve a cargar con los valores restaurados.
+   - `al_seleccionar_rectangulo` (línea 998) y
+     `_seleccionar_campo_en_punto` (línea 688): con la herramienta
+     "Ninguna (solo ver)", un clic sobre un campo de la página lo
+     selecciona y resalta en el panel.
+   - `cerrar_documento` (líneas 1970–1971): el panel se vacía y se
+     oculta.
+3. **Pruebas:**
+   - `tests/test_panel_formularios.py` (9 en total, +2 en las líneas
+     247 y 282): dar y quitar el foco sin cambiar el texto no emite
+     `valor_cambiado` (ni en el `QLineEdit` ni en el `_TextoMultilinea`);
+     cambiarlo sí emite una sola vez, y volver a enfocar sin editar no
+     vuelve a emitir.
+   - `tests/test_main_formularios.py` (nuevo, 4 pruebas): llenar un
+     campo de texto desde el panel escribe en el documento y `Ctrl+Z`
+     deja el documento y el panel vacíos; avisar un valor igual al del
+     documento no registra cambio ni escribe; un clic sobre un campo
+     (herramienta "Ninguna") lo resalta en el panel; abrir con campos
+     muestra el panel y la acción, sin campos los oculta/apaga, la
+     acción conmutable oculta y muestra, y cerrar el documento vacía y
+     oculta el panel.
+4. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt, `Document` vs `Iterable`,
+   `PDF_ENCRYPT_AES_256`, `pixmap_limpio`), 0 errores nuevos (el código
+   nuevo usa enums completos como `Qt.DockWidgetArea.RightDockWidgetArea`);
+   **pytest** → 63/63 en verde (6 nuevas).
+
+**Resultado:** El formulario se puede llenar desde el panel lateral: con
+un PDF con campos el panel se muestra solo, cada cambio escribe en el
+PDF y se redibuja la página (con Deshacer y Rehacer), un clic sobre un
+campo lo identifica en el panel, y ni el Tab ni los valores repetidos
+ensucian el historial de Deshacer.
+
+**Pendiente:**
+- Validación visual de Diego con un formulario PDF real (llenar texto,
+  casillas y listas, guardar con "Guardar como" y abrir el resultado en
+  Edge o Chrome).
+- Tarea 5: documentación (README, ROADMAP, BITACORA y marcar el diseño
+  como completado).
+
+---
+
+## Sesión 25 — 2026-10-16
+
+**Objetivo de la sesión:** Terminar la Fase 5, parte 1, con la Tarea 5
+del diseño `DISENO_FORMULARIOS.md`: documentación (README, ROADMAP,
+BITACORA) y marcar el diseño como completado. Solo documentación, sin
+cambios de código.
+
+**Actividades realizadas:**
+
+1. **`DISENO_FORMULARIOS.md`:**
+   - Bloque de "✅ COMPLETADO (Tareas 1–5, 2026-10-16)" al inicio del
+     documento (líneas 3–8), al estilo de `DISENO_DESHACER.md`.
+   - Las cinco tareas quedan marcadas con ✅ en sus títulos (líneas
+     124, 147, 160, 174 y 192).
+2. **`README.md`:**
+   - Checklist del objetivo (líneas 22–24): el punto "Rellenar y crear
+     formularios PDF" se divide en "Rellenar los campos que ya trae el
+     PDF" (hecho, con enlace al diseño) y "Crear campos de formulario
+     nuevos" (pendiente).
+   - "Estado actual" (líneas 35–42): se menciona la parte 1 de la Fase 5
+     (panel lateral, control por tipo, Deshacer/Rehacer y selección con
+     clic en la página).
+   - Nueva sección **"📝 Limitaciones conocidas de los formularios"**
+     (líneas 70–81): sin crear campos nuevos, sin XFA, sin JavaScript
+     del formulario, sin firmas digitales (solo "Firma (no editable
+     aquí)") y sin aplanar el formulario.
+   - Párrafo de pendientes (líneas 83–85): ya no dice "formularios
+     (Fase 5)" a secas, sino "crear campos de formulario nuevos (Fase
+     5, parte 2)".
+3. **`ROADMAP.md`:**
+   - Fase 5 (líneas 45–66): de "sin empezar" a "parte 1 completada",
+     con el punto hecho de rellenar campos existentes (Tareas 1–5 del
+     diseño), el pendiente de la parte 2 (crear campos) y cinco
+     limitaciones conocidas al estilo de la Fase 4.
+4. **`BITACORA.md`:** esta entrada (Sesión 25).
+5. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt, `Document` vs `Iterable`,
+   `PDF_ENCRYPT_AES_256`, `pixmap_limpio`), 0 errores nuevos;
+   **pytest** → 63/63 en verde (sin cambios de código, todo sigue en
+   verde).
+
+**Resultado:** La Fase 5, parte 1 (llenar formularios PDF) queda
+documentada y marcada como completada: el README explica la función y
+sus límites, el ROADMAP marca la parte 1 hecha y deja la parte 2
+(crear campos) como pendiente, y el diseño `DISENO_FORMULARIOS.md`
+cierra con sus cinco tareas completadas. Diego ya hizo la validación
+visual con un formulario PDF real (Tarea 4) y todo funcionó bien.
+
+**Pendiente:**
+- Fase 5, parte 2: crear campos de formulario nuevos (con su propio
+  diseño).
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

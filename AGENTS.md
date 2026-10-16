@@ -12,7 +12,7 @@ Licencia AGPL-3.0. Código y comentarios en español.
 - Entrada del programa: `app\main.py` (se lanza con `iniciar.bat`)
 - Entorno virtual: `venv\` (Windows). Usar SIEMPRE `.\venv\Scripts\python.exe`,
   nunca el `python` del sistema.
-- Plan vigente: `DISENO_DESHACER.md`
+- Plan vigente: `DISENO_FORMULARIOS.md`
 
 ## Reglas de trabajo
 

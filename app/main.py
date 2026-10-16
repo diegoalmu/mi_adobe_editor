@@ -13,6 +13,9 @@ Estado actual del programa:
       con cuadricula de miniaturas (estilo panel de Adobe Acrobat).
     - Archivo: unir PDFs, dividir por paginas, exportar a PNG, comprimir,
       convertir a Word (.docx) y OCR para hacer el PDF buscable.
+    - Formularios: panel lateral "Campos del formulario" para llenar los
+      campos que ya trae el PDF (texto, casillas, opciones y listas),
+      con deshacer y con seleccion al dar clic sobre un campo.
     - Seguridad: agregar y quitar contrasena.
 
 Como funciona el visor:
@@ -50,7 +53,9 @@ from formato_html import (
     CARPETA_FUENTES_WINDOWS, cabe_texto_con_formato, css_tipografias,
     fragmentos_a_html, insertar_texto_con_formato, tipografias_disponibles,
 )
+from formularios import escribir_valor, es_solo_xfa, listar_campos
 from historial import HistorialCambios
+from panel_formularios import PanelFormularios
 
 
 # =========================================================================
@@ -345,6 +350,19 @@ class EditorPDF(QMainWindow):
         self.area_scroll.verticalScrollBar().valueChanged.connect(self.al_hacer_scroll)
         self.setCentralWidget(self.area_scroll)
 
+        # --- Panel lateral con los campos del formulario (Tarea 4 del
+        # diseno DISENO_FORMULARIOS.md): se crea oculto y vacio, y
+        # cargar_documento decide si mostrarlo a la derecha segun los
+        # campos del PDF que se abra. ---
+        self.panel_formularios = PanelFormularios(self)
+        self.addDockWidget(
+            Qt.DockWidgetArea.RightDockWidgetArea, self.panel_formularios
+        )
+        self.panel_formularios.valor_cambiado.connect(
+            self.al_cambiar_valor_campo
+        )
+        self.panel_formularios.hide()
+
         self.setStatusBar(QStatusBar())
         self.crear_menu_archivo()
         self.crear_menus_y_barras()
@@ -396,6 +414,10 @@ class EditorPDF(QMainWindow):
         menu_seguridad = self.menuBar().addMenu("Seguridad")
         self.agregar_a_menu(menu_seguridad, "Agregar contrasena...", self.agregar_contrasena)
         self.agregar_a_menu(menu_seguridad, "Quitar contrasena...", self.quitar_contrasena)
+
+        # El menu Formularios va al final de la barra (Tarea 4 del
+        # diseno DISENO_FORMULARIOS.md)
+        self.crear_menu_formularios()
 
     def agregar_a_menu(self, menu, texto, funcion):
         accion = QAction(texto, self)
@@ -514,9 +536,10 @@ class EditorPDF(QMainWindow):
 
         Se usa al deshacer y al rehacer: se cierra el documento actual,
         se conserva la pagina visible (ajustada si ya no existe), se
-        redibujan todas las paginas y, si la herramienta "Editar
-        contenido" esta activa, se vuelven a dibujar los recuadros
-        (lo hace dibujar_todas_las_paginas).
+        redibujan todas las paginas, se recarga el panel de formularios
+        (para que muestre los valores restaurados, Tarea 4 del diseno)
+        y, si la herramienta "Editar contenido" esta activa, se vuelven
+        a dibujar los recuadros (lo hace dibujar_todas_las_paginas).
         """
         self.cancelar_edicion_texto()
         if self.documento is not None:
@@ -527,6 +550,7 @@ class EditorPDF(QMainWindow):
         )
         self.dibujar_todas_las_paginas()
         self.ir_a_pagina(self.pagina_actual)
+        self._recargar_panel_formularios()
         self.actualizar_acciones_editar()
 
     def _revertir_cambio_fallido(self):
@@ -547,6 +571,138 @@ class EditorPDF(QMainWindow):
         self._restaurar_documento(nuevo_documento)
         self.historial.vaciar_rehacer()
         self.actualizar_acciones_editar()
+
+    # ---------------------------------------------------------------
+    # PANEL DE FORMULARIOS: campos que YA trae el PDF (Tarea 4 del
+    # diseno DISENO_FORMULARIOS.md)
+    # ---------------------------------------------------------------
+
+    def crear_menu_formularios(self):
+        """Crea el menu Formularios con la accion "Mostrar campos".
+
+        La accion es conmutable (checkable): al marcarla se muestra el
+        panel lateral y al desmarcarla se oculta; ademas se queda
+        sincronizada si el usuario cierra el panel con su boton X.
+        Arranca deshabilitada: no hay nada que mostrar hasta que se
+        abra un PDF con campos.
+        """
+        menu_formularios = self.menuBar().addMenu("Formularios")
+
+        self.accion_mostrar_campos = QAction("Mostrar campos", self)
+        self.accion_mostrar_campos.setCheckable(True)
+        self.accion_mostrar_campos.setChecked(False)
+        self.accion_mostrar_campos.setEnabled(False)
+        # Marcar/desmarcar la accion muestra/oculta el panel...
+        self.accion_mostrar_campos.toggled.connect(
+            self.panel_formularios.setVisible
+        )
+        # ...y cerrar el panel (boton X del dock) desmarca la accion.
+        self.panel_formularios.visibilityChanged.connect(
+            self.accion_mostrar_campos.setChecked
+        )
+        menu_formularios.addAction(self.accion_mostrar_campos)
+
+    def al_cambiar_valor_campo(self, nombre, valor):
+        """Escribe en el PDF un valor que cambio el usuario en el panel.
+
+        Al recibir `valor_cambiado(nombre, valor)` del panel (Tarea 4
+        del diseno):
+
+        - Si el valor es igual al que ya tiene el campo en el documento
+          no se registra cambio ni se escribe nada (asi el historial de
+          Deshacer no se llena con pasos vacios).
+        - Si es distinto, se guarda la copia para Deshacer ANTES de
+          escribir ("Llenar campo: <nombre>"), se escribe con
+          `formularios.escribir_valor` y se redibuja la pagina del
+          campo para que el valor se vea en pantalla.
+        - Si la escritura falla, se revierte el cambio registrado
+          (`_revertir_cambio_fallido`, que ademas recarga el panel con
+          los valores reales del documento) y se avisa con un mensaje
+          de error.
+        """
+        if self.documento is None:
+            return
+        campo = self._campo_de_formulario(nombre)
+        if campo is None:
+            return
+        if self._valor_ya_esta_en_el_documento(campo, valor):
+            return
+        self.registrar_cambio(f"Llenar campo: {nombre}")
+        try:
+            escribir_valor(self.documento, campo, valor)
+        except Exception as error:
+            # el documento pudo quedar a medias: se revierte el cambio
+            # registrado y se vacia el rehacer (nunca existio)
+            self._revertir_cambio_fallido()
+            QMessageBox.critical(
+                self, "No se pudo llenar el campo", str(error)
+            )
+            return
+        # El campo puede estar repetido en varias paginas: se redibuja
+        # cada una donde aparece.
+        for num_pagina in sorted(set(campo["paginas"])):
+            self.redibujar_pagina_individual(num_pagina)
+
+    def _campo_de_formulario(self, nombre):
+        """Diccionario del campo del formulario con ese nombre, o `None`."""
+        if self.documento is None:
+            return None
+        for campo in listar_campos(self.documento):
+            if campo["nombre"] == nombre:
+                return campo
+        return None
+
+    def _valor_ya_esta_en_el_documento(self, campo, valor):
+        """`True` si el documento ya tiene ese valor en ese campo.
+
+        Sirve para no registrar ni escribir nada cuando el panel avisa
+        de un campo cuyo valor no cambio de verdad. En las casillas se
+        compara como encendido/apagado (bool), y en los demas tipos
+        como texto.
+        """
+        if campo["tipo"] == "casilla":
+            return bool(campo["valor"]) == bool(valor)
+        return str(campo["valor"]) == str(valor)
+
+    def _recargar_panel_formularios(self):
+        """Vuelve a leer en el panel los campos del documento actual.
+
+        Se llama al abrir, deshacer, rehacer y cerrar un documento (y
+        tambien cuando una escritura falla, porque el documento se
+        revierte), para que el panel siempre muestre los valores
+        reales del PDF. Devuelve la lista de campos cargada.
+        """
+        if self.documento is None:
+            campos = []
+        else:
+            campos = listar_campos(self.documento)
+        self.panel_formularios.cargar(campos)
+        self.accion_mostrar_campos.setEnabled(bool(campos))
+        return campos
+
+    def _mostrar_panel_formularios(self, mostrar):
+        """Muestra u oculta el panel de campos y sincroniza la accion."""
+        self.accion_mostrar_campos.setChecked(mostrar)
+        self.panel_formularios.setVisible(mostrar)
+
+    def _seleccionar_campo_en_punto(self, numero_pagina, rect_pdf):
+        """Si el clic cayo dentro de un campo, lo selecciona en el panel.
+
+        Se usa con la herramienta "Ninguna (solo ver)" (Tarea 4 del
+        diseno): el punto del clic se compara con el rectangulo de
+        cada aparicion del campo en esa pagina, para saber "cual es
+        cual" sin escribir directamente sobre la pagina.
+        """
+        if self.documento is None or not self.panel_formularios.isVisible():
+            return
+        punto = rect_pdf.tl + (rect_pdf.br - rect_pdf.tl) * 0.5
+        for campo in listar_campos(self.documento):
+            for num_aparicion, pagina_del_campo in enumerate(campo["paginas"]):
+                if pagina_del_campo != numero_pagina:
+                    continue
+                if campo["rects"][num_aparicion].contains(punto):
+                    self.panel_formularios.seleccionar(campo["nombre"])
+                    return
 
     # ---------------------------------------------------------------
     # BARRA DE HERRAMIENTAS (solo lo de uso constante: zoom, pagina, herramienta activa)
@@ -654,7 +810,11 @@ class EditorPDF(QMainWindow):
         """Muestra un documento ya abierto en el visor.
 
         Vacia el historial de Deshacer/Rehacer (regla 2 del diseno:
-        abrir otro documento empieza el historial de cero).
+        abrir otro documento empieza el historial de cero) y carga el
+        panel de formularios (Tarea 4 del diseno
+        DISENO_FORMULARIOS.md): con campos se muestra a la derecha,
+        sin campos se oculta, y si el PDF es solo XFA se avisa que no
+        se puede llenar con este programa.
         """
         self.documento = documento
         self.ruta_actual = ruta
@@ -669,6 +829,20 @@ class EditorPDF(QMainWindow):
         self.historial.vaciar()
         self.dibujar_todas_las_paginas()
         self.actualizar_acciones_editar()
+
+        # Con campos, el panel se muestra solo a la derecha; sin
+        # campos se oculta (Tarea 4 del diseno). Si el PDF es solo
+        # XFA (formato viejo de Adobe LiveCycle) se avisa que no se
+        # puede llenar con este programa.
+        if es_solo_xfa(documento):
+            QMessageBox.warning(
+                self,
+                "Formulario XFA",
+                "Este formulario usa XFA y no se puede llenar con este "
+                "programa.",
+            )
+        campos = self._recargar_panel_formularios()
+        self._mostrar_panel_formularios(bool(campos))
 
     def dibujar_todas_las_paginas(self):
         """Borra lo que hubiera dibujado y vuelve a crear una EtiquetaPDF por cada pagina."""
@@ -822,6 +996,10 @@ class EditorPDF(QMainWindow):
 
         herramienta = self.combo_herramienta.currentText()
         if herramienta == "Ninguna (solo ver)":
+            # En modo solo lectura el unico efecto de un clic puede ser
+            # seleccionar en el panel el campo del formulario sobre el
+            # que cayo (Tarea 4 del diseno), para saber cual es cual.
+            self._seleccionar_campo_en_punto(numero_pagina, rect_pdf)
             return
 
         pagina = self.documento[numero_pagina]
@@ -1786,6 +1964,11 @@ class EditorPDF(QMainWindow):
         # Cerrar el documento vacia el historial (regla 2 del diseno)
         self.historial.vaciar()
         self.dibujar_todas_las_paginas()  # como documento es None, esto deja el panel vacio
+
+        # Sin documento no hay campos que mostrar: el panel se vacia
+        # y se oculta (Tarea 4 del diseno)
+        self._recargar_panel_formularios()
+        self._mostrar_panel_formularios(False)
 
         etiqueta_vacia = QLabel("Abre un PDF con el menu Archivo -> Abrir PDF")
         etiqueta_vacia.setAlignment(Qt.AlignCenter)
