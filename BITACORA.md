@@ -1637,6 +1637,56 @@ antes + 20 nuevas). Sin validación visual: la Tarea 1 no tiene ventanas.
 
 ---
 
+## Sesión 28 — 2026-10-22
+
+**Objetivo de la sesión:** Tarea 2 de `DISENO_CREAR_CAMPOS.md`: crear
+`app/dialogo_nuevo_campo.py` con la ventana "Nuevo campo" (pide nombre
+y, si es texto, si es multilínea), sin tocar `main.py` ni ninguna función
+ya existente.
+
+**Actividades realizadas:**
+
+1. **`app/dialogo_nuevo_campo.py`** (nuevo, 149 líneas): docstring del
+   módulo (líneas 1–27); imports de Qt y `TIPOS_CREABLES` de
+   `formularios` (líneas 29–39); título por tipo en `_TITULOS` (línea
+   42: "Nuevo campo de texto", "Nueva casilla", "Nuevo campo de firma");
+   `DialogoNuevoCampo(QDialog)` (línea 49) con `__init__(tipo,
+   nombre_sugerido, multilinea_inicial, validar, parent=None)` (línea
+   62: `ValueError` con tipo fuera de `TIPOS_CREABLES`, `QLineEdit` con
+   el nombre sugerido ya seleccionado, `QCheckBox` "Varias líneas" solo
+   visible en texto, etiqueta roja del mensaje, `QDialogButtonBox` con
+   "Aceptar" y "Cancelar"); `_actualizar_estado` (línea 125: valida con
+   `textChanged` y deshabilita Aceptar mientras haya mensaje); y
+   `obtener_valores` (línea 136: nombre recortado y estado de la
+   casilla). Todo con nombres completos de enums de Qt
+   (`QDialogButtonBox.StandardButton.Ok`, `.Cancel`).
+2. **`tests/test_dialogo_nuevo_campo.py`** (nuevo, 136 líneas, 12
+   pruebas, offscreen y sin `exec()`): títulos por tipo (línea 53);
+   "Varias líneas" visible solo en texto (línea 67); nombre sugerido
+   seleccionado (línea 78); textos de los botones (línea 86); el
+   mensaje y el botón Aceptar al escribir "repetido" y al borrarlo
+   (línea 93); `obtener_valores` recortado (línea 113); multilinea
+   apagada en casilla y firma (línea 123); tipo inválido → `ValueError`
+   (línea 132).
+3. **`BITACORA.md`:** esta entrada (Sesión 28).
+
+**Resultado:** **pyright** → 40 errores, los mismos ruidos conocidos y
+ninguno en `app/dialogo_nuevo_campo.py` ni en
+`tests/test_dialogo_nuevo_campo.py`; **pytest** → 95/95 en verde (83
+de antes + 12 nuevas).
+
+**Pendiente:**
+- Tarea 3: conectar las herramientas nuevas en `main.py` (ahí sí hay
+  validación visual de Diego).
+- Decisiones tomadas al seguir el diseño: el diálogo valida el nombre
+  **recortado** (consistente con la regla de `validar_nombre_nuevo` de
+  que el nombre llega sin espacios), los textos de los botones se fijan
+  en español de forma explícita, en casilla y firma la multilinea
+  queda oculta y desmarcada aunque venga `multilinea_inicial=True`, y
+  un tipo fuera de `TIPOS_CREABLES` lanza `ValueError` al abrir.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
