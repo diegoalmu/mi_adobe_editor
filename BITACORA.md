@@ -1587,6 +1587,56 @@ y pyright/pytest dan los mismos resultados que antes de la migración.
 
 ---
 
+## Sesión 27 — 2026-10-22
+
+**Objetivo de la sesión:** Tarea 1 de `DISENO_CREAR_CAMPOS.md`: agregar
+a `app/formularios.py` la creación de campos de formulario nuevos
+(texto, casilla y firma) sin ventanas, con sus pruebas. No se tocó nada
+más (ninguna función existente se modificó).
+
+**Actividades realizadas:**
+
+1. **`app/formularios.py`:** docstring del módulo ampliado (líneas
+   20–40) con las funciones nuevas y `import fitz` (línea 43). Al final
+   del archivo, la sección "CREAR CAMPOS" (líneas 366–565):
+   `TIPOS_CREABLES` (línea 373) y constantes internas de tamaños;
+   `validar_nombre_nuevo` (línea 402: vacío, máximo 60 caracteres, sin
+   punto, sin repetir un nombre existente comparando sin distinguir
+   mayúsculas); `sugerir_nombre` (línea 434: primer nombre libre
+   `texto_1`, `casilla_1`…, `ValueError` si el tipo no es creable);
+   `rect_para_campo` (línea 455: tamaño estándar si hubo un clic,
+   casilla cuadrada con lado mínimo de 10 pt, recorte a la página y
+   `ValueError` si queda menor de 8 pt); `crear_campo` (línea 495:
+   valida tipo, `multilinea` y nombre **antes** de tocar el documento,
+   crea el widget con borde gris y fondo azul claro y devuelve su
+   diccionario tal como lo listaría `listar_campos`); y el interno
+   `_nombres_existentes` (línea 558).
+2. **`tests/test_crear_campos.py`** (nuevo, 326 líneas, 20 pruebas con
+   PDFs en memoria): los tres tipos persisten al guardar con `tobytes()`
+   y reabrir (línea 48); los campos creados se llenan con
+   `escribir_valor` y el valor persiste (línea 106); las reglas del
+   nombre (líneas 143 y 157: vacío, con punto, de 61 caracteres,
+   repetido y repetido con otras mayúsculas dan mensaje, uno válido da
+   `""`); los tres errores de `crear_campo` no tocan el documento
+   (líneas 171, 196 y 212: mismos widgets en la página); `sugerir_nombre`
+   (líneas 233, 244 y 259); y `rect_para_campo` (líneas 269, 288, 303,
+   310 y 317: tamaños estándar, casilla cuadrada, recorte a la página,
+   clic pegado al borde y tipo inválido).
+3. **`BITACORA.md`:** esta entrada (Sesión 27).
+
+**Resultado:** **pyright** → 40 errores, los mismos ruidos conocidos de
+siempre y ninguno en `app/formularios.py` ni en
+`tests/test_crear_campos.py`; **pytest** → 83/83 en verde (las 63 de
+antes + 20 nuevas). Sin validación visual: la Tarea 1 no tiene ventanas.
+
+**Pendiente:**
+- Tarea 2: la ventana "Nuevo campo" (`app/dialogo_nuevo_campo.py`).
+- Decisión tomada al seguir el diseño: `rect_para_campo` también lanza
+  `ValueError` si el tipo no está en `TIPOS_CREABLES`, porque la tabla
+  de tamaños no le define cuadro.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD

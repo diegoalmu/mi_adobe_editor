@@ -17,13 +17,30 @@ AcroForm), segun el diseno `DISENO_FORMULARIOS.md` (Tareas 1 y 2):
   los widgets del campo y regenera su apariencia, para que el texto se
   vea en cualquier visor.
 
+Tambien crea campos nuevos, segun `DISENO_CREAR_CAMPOS.md` (Tarea 1):
+
+- `TIPOS_CREABLES`: los tipos que se pueden crear (`"texto"`,
+  `"casilla"` y `"firma"`).
+- `validar_nombre_nuevo(documento, nombre)`: mensaje de error en
+  espanol, o `""` si el nombre se puede usar.
+- `sugerir_nombre(documento, tipo)`: primer nombre libre de la forma
+  `texto_1`, `texto_2`... (`casilla_N` y `firma_N`).
+- `rect_para_campo(tipo, rect, rect_pagina)`: rectangulo final del
+  campo (tamano estandar si hubo un clic, casilla cuadrada, recortado
+  a la pagina).
+- `crear_campo(documento, num_pagina, tipo, nombre, rect, multilinea)`:
+  crea el campo en la pagina y devuelve su diccionario, con la forma
+  que devolveria `listar_campos`.
+
 Tipos posibles de campo (los del diseno): `"texto"`, `"casilla"`,
 `"opcion"`, `"lista"` y `"firma"`. Los botones de accion (pushbotones)
 no se listan, porque no se pueden llenar.
 
 Este modulo no crea ventanas: se prueba con `tests/test_formularios.py`
-sin Qt.
+y `tests/test_crear_campos.py` sin Qt.
 """
+
+import fitz  # PyMuPDF
 
 # Las constantes de los tipos de campo y de las banderas del PDF viven
 # en el modulo "mupdf" de PyMuPDF; se importan de ahi porque PyMuPDF
@@ -345,3 +362,204 @@ def _hay_xfa(documento):
         # El AcroForm esta escrito en el catalogo, sin objeto propio.
         return "XFA" in valor
     return False
+
+
+# ---------------------------------------------------------------------
+# CREAR CAMPOS (DISENO_CREAR_CAMPOS.md, Tarea 1)
+# ---------------------------------------------------------------------
+
+
+# Tipos de campo que se pueden crear desde el programa.
+TIPOS_CREABLES = ("texto", "casilla", "firma")
+
+# Tipo -> constante de PyMuPDF para crear su widget.
+_TIPOS_WIDGET = {
+    "texto": PDF_WIDGET_TYPE_TEXT,
+    "casilla": PDF_WIDGET_TYPE_CHECKBOX,
+    "firma": PDF_WIDGET_TYPE_SIGNATURE,
+}
+
+# Tamanos estandar (en puntos), para cuando el usuario solo da un clic
+# en vez de arrastrar un cuadro. Van desde el punto del clic.
+_TAMANOS_ESTANDAR = {
+    "texto": (200, 22),
+    "casilla": (14, 14),
+    "firma": (180, 50),
+}
+
+# Un cuadro con ancho o alto menor que esto se toma como un clic (no
+# como un arrastre); y un campo que, recortado a la pagina, quede menor
+# que esto no se crea.
+_MINIMO_CLIC = 8
+
+# Lado minimo de la casilla cuando el usuario arrastra el cuadro.
+_MINIMO_CASILLA = 10
+
+# Longitud maxima del nombre de un campo nuevo.
+_MAXIMO_NOMBRE = 60
+
+
+def validar_nombre_nuevo(documento, nombre):
+    """Mensaje de error en espanol, o `""` si `nombre` se puede usar.
+
+    Reglas del diseno (`DISENO_CREAR_CAMPOS.md`):
+
+    1. No puede estar vacio.
+    2. Maximo 60 caracteres.
+    3. No puede llevar punto (`.`): en los PDF el punto separa niveles
+       de un nombre (`cliente.nombre` es el campo `nombre` dentro de
+       `cliente`), y un punto metido sin querer rompe el formulario en
+       otros visores.
+    4. No puede repetir el nombre de un campo existente, comparando sin
+       distinguir mayusculas y minusculas (`Nombre` y `nombre` cuentan
+       como el mismo, para no confundir al usuario).
+
+    `nombre` se recibe ya sin espacios al inicio ni al final (los
+    quita quien llama, por ejemplo la ventana "Nuevo campo").
+    """
+    if not nombre:
+        return "El nombre no puede quedar vacio."
+    if len(nombre) > _MAXIMO_NOMBRE:
+        return (
+            f"El nombre no puede tener mas de {_MAXIMO_NOMBRE} "
+            "caracteres."
+        )
+    if "." in nombre:
+        return "El nombre no puede llevar punto (.)."
+    if nombre.lower() in _nombres_existentes(documento):
+        return f"Ya existe un campo llamado '{nombre}'. Elige otro."
+    return ""
+
+
+def sugerir_nombre(documento, tipo):
+    """Primer nombre libre de la forma `texto_1`, `texto_2`...
+
+    Cada tipo usa su prefijo (`casilla_1`, `firma_1`). Los nombres que
+    ya existen en el documento se comparan sin distinguir mayusculas,
+    igual que en `validar_nombre_nuevo`.
+
+    Lanza `ValueError` si `tipo` no esta en `TIPOS_CREABLES`.
+    """
+    if tipo not in TIPOS_CREABLES:
+        raise ValueError(
+            f"Tipo de campo no valido: '{tipo}'. Tipos validos: "
+            f"{', '.join(TIPOS_CREABLES)}."
+        )
+    existentes = _nombres_existentes(documento)
+    numero = 1
+    while f"{tipo}_{numero}" in existentes:
+        numero += 1
+    return f"{tipo}_{numero}"
+
+
+def rect_para_campo(tipo, rect, rect_pagina):
+    """Rectangulo final de un campo nuevo, en coordenadas de PDF.
+
+    - Si el usuario solo da un clic (`rect` con ancho o alto menor a
+      8 pt) se usa el tamano estandar del tipo, desde el punto del clic.
+    - La casilla arrastrada se hace cuadrada: lado = el menor de ancho
+      y alto, con minimo 10 pt.
+    - El cuadro se recorta a `rect_pagina`.
+    - Lanza `ValueError` si `tipo` no esta en `TIPOS_CREABLES` o si,
+      despues del recorte, el cuadro mide menos de 8 pt de ancho o de
+      alto (por ejemplo, un clic pegado al borde de la pagina).
+    """
+    if tipo not in TIPOS_CREABLES:
+        raise ValueError(
+            f"Tipo de campo no valido: '{tipo}'. Tipos validos: "
+            f"{', '.join(TIPOS_CREABLES)}."
+        )
+    cuadro = fitz.Rect(rect)
+    if cuadro.width < _MINIMO_CLIC or cuadro.height < _MINIMO_CLIC:
+        # Solo hubo un clic: tamano estandar desde el punto del clic.
+        ancho, alto = _TAMANOS_ESTANDAR[tipo]
+        cuadro = fitz.Rect(
+            cuadro.x0, cuadro.y0, cuadro.x0 + ancho, cuadro.y0 + alto
+        )
+    elif tipo == "casilla":
+        # Casilla arrastrada: cuadrada, del lado menor (minimo 10 pt).
+        lado = max(min(cuadro.width, cuadro.height), _MINIMO_CASILLA)
+        cuadro = fitz.Rect(
+            cuadro.x0, cuadro.y0, cuadro.x0 + lado, cuadro.y0 + lado
+        )
+    # Recorte a los limites de la pagina.
+    cuadro = cuadro & fitz.Rect(rect_pagina)
+    if cuadro.width < _MINIMO_CLIC or cuadro.height < _MINIMO_CLIC:
+        raise ValueError(
+            "El cuadro elegido queda demasiado pequeno en la pagina; "
+            "hazlo mas grande."
+        )
+    return cuadro
+
+
+def crear_campo(
+    documento, num_pagina, tipo, nombre, rect, multilinea=False
+):
+    """Crea un campo nuevo en la pagina `num_pagina` y lo devuelve.
+
+    El valor de regreso es el diccionario del campo recien creado, con
+    la forma que devuelve `listar_campos` (se busca por nombre despues
+    de crearlo).
+
+    - Valida el tipo, `multilinea` y el nombre ANTES de tocar el
+      documento: si algo no es valido lanza `ValueError` con el mensaje
+      en espanol y el documento queda igual.
+    - `rect` se usa tal como llega: el ajuste de tamano es trabajo de
+      `rect_para_campo`, que llama quien use esta funcion.
+    - `multilinea=True` solo se permite con `tipo == "texto"`; con otro
+      tipo, `ValueError`.
+    """
+    if tipo not in TIPOS_CREABLES:
+        raise ValueError(
+            f"Tipo de campo no valido: '{tipo}'. Tipos validos: "
+            f"{', '.join(TIPOS_CREABLES)}."
+        )
+    if multilinea and tipo != "texto":
+        raise ValueError(
+            f"El campo '{nombre}' es de {tipo}: solo los campos de "
+            "texto pueden ser multilinea."
+        )
+    mensaje = validar_nombre_nuevo(documento, nombre)
+    if mensaje:
+        raise ValueError(mensaje)
+
+    widget = fitz.Widget()
+    # setattr porque pyright no tiene anotados los atributos de Widget
+    # (mismo motivo y mismo patron que en tests/test_formularios.py).
+    setattr(widget, "field_name", nombre)
+    setattr(widget, "field_type", _TIPOS_WIDGET[tipo])
+    setattr(widget, "rect", fitz.Rect(rect))
+    # Borde gris y fondo azul muy claro, como en el diseno: el campo
+    # vacio se ve con borde y fondo en el programa y en Chrome. El de
+    # firma no toma el borde: PyMuPDF le pone su propia apariencia,
+    # una etiqueta "SIGN".
+    setattr(widget, "border_color", (0.5, 0.5, 0.5))
+    setattr(widget, "border_width", 1)
+    setattr(widget, "fill_color", (0.93, 0.95, 1.0))
+    if tipo == "texto":
+        # 0 = tamano automatico del texto (se ajusta al cuadro).
+        setattr(widget, "text_fontsize", 0)
+        if multilinea:
+            setattr(widget, "field_flags", PDF_TX_FIELD_IS_MULTILINE)
+    documento[num_pagina].add_widget(widget)
+
+    creados = [
+        campo
+        for campo in listar_campos(documento)
+        if campo["nombre"] == nombre
+    ]
+    if not creados:
+        # No deberia pasar: el widget recien creado se lista con el
+        # mismo nombre que se acaba de guardar.
+        raise ValueError(f"No se pudo crear el campo '{nombre}'.")
+    return creados[0]
+
+
+def _nombres_existentes(documento):
+    """Conjunto con los nombres de campo del documento, en minusculas.
+
+    Se guardan en minusculas para comparar sin distinguir mayusculas y
+    minusculas, como pide la regla 4 del diseno (`Nombre` y `nombre`
+    son el mismo campo).
+    """
+    return {campo["nombre"].lower() for campo in listar_campos(documento)}
