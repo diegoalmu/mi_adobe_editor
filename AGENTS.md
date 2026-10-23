@@ -8,10 +8,12 @@ al trabajar en este repositorio. Las reglas son obligatorias.
 Editor de PDF de escritorio en Python + PySide6 + PyMuPDF.
 Licencia AGPL-3.0. Código y comentarios en español.
 
-- Carpeta oficial y única: `D:\GITHUB\mi_adobe_editor`
-- Entrada del programa: `app\main.py` (se lanza con `iniciar.bat`)
-- Entorno virtual: `venv\` (Windows). Usar SIEMPRE `.\venv\Scripts\python.exe`,
-  nunca el `python` del sistema.
+- Sistema: Debian 13 (GNOME). Carpeta oficial y única:
+  `/home/endoralex/Documentos/Proyectos/github/mi_adobe_editor`
+- Entrada del programa: `app/main.py` (se lanza con `./iniciar.sh`;
+  `iniciar.bat` se conserva solo para quien use Windows)
+- Entorno virtual: `venv/` (Linux). Usar SIEMPRE `venv/bin/python`,
+  nunca el `python3` del sistema ni `pip` global.
 - Plan vigente: `DISENO_FORMULARIOS.md`
 
 ## Reglas de trabajo
@@ -24,23 +26,23 @@ Licencia AGPL-3.0. Código y comentarios en español.
    parámetros "para uso futuro". Si algo no se puede terminar, dilo.
 4. **No agregues dependencias** sin pedir permiso. Las permitidas están en
    `requirements.txt` y `requirements-dev.txt`.
-5. **No toques** `venv\`, `LICENSE`, `pyrightconfig.json` ni `.gitignore`.
+5. **No toques** `venv/`, `LICENSE`, `pyrightconfig.json` ni `.gitignore`.
 6. **No hagas commits ni push.** Diego hace los commits con GitHub Desktop.
 7. **No borres archivos del usuario** (PDFs, imágenes, documentos).
 8. Sigue el estilo del código existente: nombres en español sin acentos ni
    ñ en identificadores (`tamano`, `pagina`), comentarios explicativos en
    español, mensajes al usuario en español.
-9. Los imports entre módulos de `app\` van sin prefijo de paquete
+9. Los imports entre módulos de `app/` van sin prefijo de paquete
    (`from formato_html import ...`), porque `main.py` se ejecuta como script.
 
 ## Verificación obligatoria antes de terminar
 
-```powershell
-.\venv\Scripts\pyright.exe
+```bash
+venv/bin/pyright
 ```
 
-```powershell
-.\venv\Scripts\python.exe -m pytest -v
+```bash
+venv/bin/python -m pytest -v
 ```
 
 - **Pyright:** no debe haber errores nuevos. Son ruido conocido y NO se
@@ -58,7 +60,7 @@ Licencia AGPL-3.0. Código y comentarios en español.
 
 1. Agrega una entrada en `BITACORA.md` con la plantilla que está al final
    de ese archivo (fecha, objetivo, actividades, resultado, pendientes).
-   La fecha se obtiene con `Get-Date -Format yyyy-MM-dd`; nunca se copia
+   La fecha se obtiene con `date +%F`; nunca se copia
    de la entrada anterior.
 2. Entrega un resumen con: archivos creados o modificados, qué se cambió
    en cada uno (con números de línea), resultado de pyright y de pytest, y

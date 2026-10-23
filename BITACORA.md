@@ -1551,6 +1551,42 @@ visual con un formulario PDF real (Tarea 4) y todo funcionó bien.
 
 ---
 
+## Sesión 26 — 2026-10-22
+
+**Objetivo de la sesión:** Tarea de mantenimiento (sin tocar código de
+`app/` ni de `tests/`): cerrar la migración del proyecto de Windows a
+Debian 13 reinstalando las dependencias en el `venv/` de Linux y
+comprobando que todo sigue en verde.
+
+**Actividades realizadas:**
+
+1. **`requirements.txt`:** verificación del fijado de PyMuPDF a
+   `>=1.24.9,<2.0` (líneas 4–7). La causa: en PyMuPDF 2.0 los botones de
+   opción de los formularios no guardan el valor elegido (probado el
+   2026-10-22 comparando 2.0 con 1.28.2), así que 2.0 queda excluido
+   hasta que se investigue el cambio.
+2. **Instalación:** `venv/bin/python -m pip install -r requirements.txt`
+   desinstaló `pymupdf 2.0` y instaló `PyMuPDF-1.28.2`. Confirmado con
+   `venv/bin/python -c "import pymupdf; print(pymupdf.VersionBind)"` →
+   `1.28.2` (menor que 2.0).
+3. **`iniciar.sh`:** `chmod +x iniciar.sh` para poder lanzar el programa
+   con `./iniciar.sh` en Debian (en Windows se usaba `iniciar.bat`).
+4. **Verificación:** **pyright** → 40 errores, los mismos ruidos
+   conocidos (enums cortos de Qt, `Document` vs `Iterable`,
+   `PDF_ENCRYPT_AES_256`, `pixmap_limpio`), 0 errores nuevos;
+   **pytest** → 63/63 en verde.
+
+**Resultado:** El entorno de Debian 13 queda listo: las dependencias se
+instalan desde `requirements.txt` con PyMuPDF 1.28.2 (por debajo de
+2.0, por el fallo de los botones de opción), `iniciar.sh` es ejecutable
+y pyright/pytest dan los mismos resultados que antes de la migración.
+
+**Pendiente:**
+- Investigar el cambio de PyMuPDF 2.0 que hace que los botones de opción
+  no guarden su valor, para poder subir de versión cuando se resuelva.
+
+---
+
 <!-- Copia el bloque de abajo cada vez que trabajemos una nueva sesión -->
 <!--
 ## Sesión N — YYYY-MM-DD
